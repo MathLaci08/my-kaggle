@@ -1,0 +1,47 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+
+import pathlib
+
+train_csv = pathlib.Path(__file__, "..\\data\\train.csv").resolve()
+test_csv = pathlib.Path(__file__, "..\\data\\test.csv").resolve()
+random_state = 237
+
+# read data from the provided csv files
+X = pd.read_csv(train_csv)
+X_test = pd.read_csv(test_csv)
+
+# drop rows without labels
+X.dropna(axis=0, subset=['SalePrice'], inplace=True)
+
+# set labels to variable y
+y = X.SalePrice
+X.drop(['SalePrice'], axis=1, inplace=True)
+
+# splitting the data into training and validation sets
+X_train, y_train, X_valid, y_valid = train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=random_state)
+
+# get column names for categorical and numerical features
+categorical_vars = X.select_dtypes(include='object').columns
+numerical_vars = X.select_dtypes(exclude='object').columns
+
+# design transformers for categorical and numerical data
+numerical_transformer = SimpleImputer(strategy='mean')
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('encoder', OneHotEncoder(handle_unknown='ignore'))
+])
+
+# put transformers together
+preprocessor = ColumnTransformer(transformers=[
+    ('numerical', numerical_transformer, numerical_vars),
+    ('categorical', categorical_transformer, categorical_vars)
+])
+
+# standardize features
+standard_scaler = StandardScaler()
+standard_scaler.fit_transform(X, y)
