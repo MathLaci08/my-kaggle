@@ -4,7 +4,7 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_absolute_error
 
 import pathlib
 
@@ -24,7 +24,7 @@ y = X.SalePrice
 X.drop(['Id', 'SalePrice', 'Alley', 'PoolQC', 'Fence', 'MiscFeature'], axis=1, inplace=True)
 
 # splitting the data into training and validation sets
-X_train, X_valid, y_train, y_valid = train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=random_state)
+X_train, X_valid, y_train, y_valid = train_test_split(X, y, train_size=0.9, test_size=0.1, random_state=random_state)
 
 # get column names for categorical and numerical features
 categorical_vars = X.select_dtypes(include='object').columns.append(pd.Index(['MSSubClass']))
@@ -86,3 +86,4 @@ plt.plot(predictions.subtract(y_valid.values))
 plt.show()
 
 print("Mean abs error: ", mean_absolute_error(y_valid.values, predictions))
+print("Significant features: ", list(significant_cols))
