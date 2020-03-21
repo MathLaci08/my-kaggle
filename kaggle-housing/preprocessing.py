@@ -1,10 +1,8 @@
 import pandas as pd
+import numpy as np
 
-import statsmodels.api as sm
-
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error
+from sklearn.decomposition import PCA
 
 from category_encoders import OneHotEncoder
 
@@ -15,205 +13,243 @@ import seaborn as sns
 from scipy import stats
 from scipy.stats import norm, skew
 
-import numpy as np
-
 import pathlib
 from math import sqrt, ceil
 
-train_csv = pathlib.Path(__file__, "..\\data\\train.csv").resolve()
-test_csv = pathlib.Path(__file__, "..\\data\\test.csv").resolve()
-random_state = 237
-n_components = 200
 
-# read data from the provided csv files
-X = pd.read_csv(train_csv)
-X_test = pd.read_csv(test_csv)
+class PreProcessing:
+    # this should go to a config file with all the other (future) hyper-parameters
+    n_components = 200
 
-# drop rows without labels
-X.dropna(axis=0, subset=['SalePrice'], inplace=True)
+    def __init__(self):
+        self.already_preprocessed = False
+        try:
+            pp_train_csv = pathlib.Path(__file__, "..\\data\\pp_train.csv").resolve()
+            pp_test_csv = pathlib.Path(__file__, "..\\data\\pp_test.csv").resolve()
 
-# set labels to variable y
-y = pd.DataFrame(X.SalePrice, columns=['SalePrice'])
-X.drop(['Id', 'Utilities', 'SalePrice'], axis=1, inplace=True)
-test_ids = X_test.Id
-X_test.drop(['Id', 'Utilities'], axis=1, inplace=True)
+            self.pp_X = pd.read_csv(pp_train_csv)
+            self.pp_X_test = pd.read_csv(pp_test_csv)
 
-# make MSSubClass categorical
-X['MSSubClass'] = X['MSSubClass'].apply(str)
-X_test['MSSubClass'] = X_test['MSSubClass'].apply(str)
+            self.already_preprocessed = True
+        except FileNotFoundError:
+            self.pp_X = None
+            self.pp_X_test = None
+            train_csv = pathlib.Path(__file__, "..\\data\\train.csv").resolve()
+            test_csv = pathlib.Path(__file__, "..\\data\\test.csv").resolve()
 
-# get numerical features
-numerical_vars = X.select_dtypes(exclude="object").columns
-nv_for_detection = pd.Index([f for f in numerical_vars if X[f].nunique() > 500])
-cols = ceil(sqrt(nv_for_detection.size))
-rows = ceil(nv_for_detection.size // cols)
+            # read data from the provided csv files
+            self.X = pd.read_csv(train_csv)
+            self.y = None
+            self.X_test = pd.read_csv(test_csv)
 
-# detect outliers
-fig, axes = plt.subplots(rows, cols)
-fig.tight_layout(pad=2.0)
+    def get_preprocessed_data(self):
+        if self.already_preprocessed:
+            return self.pp_X, self.pp_X_test
+        else:
+            test_ids = self.separate_target()
+            numerical_vars = self.detect_outliers()
+            self.normalize_target()
+            self.imputer()
+            self.correlation_map()
+            self.one_hot_encode()
+            self.transform_skewed_features(numerical_vars)
+            self.standardize_data()
+            self.pca()
 
-for feature in nv_for_detection:
-    loc = nv_for_detection.get_loc(feature)
-    axes[loc // cols][loc % cols].scatter(x=X[feature], y=y, s=5)
-    axes[loc // cols][loc % cols].set(xlabel=feature, ylabel='SalePrice')
-plt.show()
+            self.X = self.X.join(self.y)
+            self.X_test = test_ids.to_frame().join(self.X_test)
 
-# deleting outliers
-outliers = X[(X[nv_for_detection[5]] > 4000) & (y.SalePrice < 500000) | (X[nv_for_detection[0]] > 150000)].index
-X = X.drop(outliers)
-y = y.drop(outliers)
+            self.save_data()
 
-fig, axes = plt.subplots(rows, cols)
-fig.tight_layout(pad=2.0)
+            return self.X, self.X_test
 
-for feature in nv_for_detection:
-    loc = nv_for_detection.get_loc(feature)
-    axes[loc // cols][loc % cols].scatter(x=X[feature], y=y, s=5)
-    axes[loc // cols][loc % cols].set(xlabel=feature, ylabel='SalePrice')
-plt.show()
+    def separate_target(self):
+        # drop rows without labels
+        self.X.dropna(axis=0, subset=['SalePrice'], inplace=True)
 
-# check the distribution of SalePrice
-sns.distplot(y, fit=norm)
+        # set labels to variable y
+        self.y = pd.DataFrame(self.X.SalePrice, columns=['SalePrice'])
+        self.X.drop(['Id', 'Utilities', 'SalePrice'], axis=1, inplace=True)
+        test_ids = self.X_test.Id
+        self.X_test.drop(['Id', 'Utilities'], axis=1, inplace=True)
 
-(mu, sigma) = norm.fit(y)
+        # make MSSubClass categorical
+        self.X['MSSubClass'] = self.X['MSSubClass'].apply(str)
+        self.X_test['MSSubClass'] = self.X_test['MSSubClass'].apply(str)
 
-plt.legend([f'Normal distribution $\mu=$ {mu:.2f} and $\sigma=$ {sigma:.2f} )'], loc='best')
-plt.ylabel('Frequency')
-plt.title('SalePrice distribution')
+        return test_ids
 
-# Get also the QQ-plot
-plt.figure()
-stats.probplot(y.SalePrice, plot=plt)
-plt.show()
+    def detect_outliers(self):
+        # get numerical features
+        numerical_vars = self.X.select_dtypes(exclude="object").columns
+        nv_for_detection = pd.Index([f for f in numerical_vars if self.X[f].nunique() > 500])
+        cols = ceil(sqrt(nv_for_detection.size))
+        rows = ceil(nv_for_detection.size // cols)
 
-# distribution is right skewed, so logarithmic transformation will be made
-y = np.log(y)
+        # detect outliers
+        fig, axes = plt.subplots(rows, cols)
+        fig.tight_layout(pad=2.0)
 
-# check the distribution of the transformed SalePrice
-sns.distplot(y, fit=norm)
+        for feature in nv_for_detection:
+            loc = nv_for_detection.get_loc(feature)
+            axes[loc // cols][loc % cols].scatter(x=self.X[feature], y=self.y, s=5)
+            axes[loc // cols][loc % cols].set(xlabel=feature, ylabel='SalePrice')
+        plt.show()
 
-(mu, sigma) = norm.fit(y)
+        # deleting outliers
+        condition1 = (self.X[nv_for_detection[5]] > 4000) & (self.y.SalePrice < 500000)
+        condition2 = (self.X[nv_for_detection[0]] > 150000)
+        outliers = self.X[condition1 | condition2].index
+        self.X = self.X.drop(outliers).reset_index(drop=True)
+        self.y = self.y.drop(outliers).reset_index(drop=True)
 
-plt.legend([f'Normal distribution $\mu=$ {mu:.2f} and $\sigma=$ {sigma:.2f} )'], loc='best')
-plt.ylabel('Frequency')
-plt.title('SalePrice distribution')
+        fig, axes = plt.subplots(rows, cols)
+        fig.tight_layout(pad=2.0)
 
-# Get also the QQ-plot
-plt.figure()
-stats.probplot(y.SalePrice, plot=plt)
-plt.show()
+        for feature in nv_for_detection:
+            loc = nv_for_detection.get_loc(feature)
+            axes[loc // cols][loc % cols].scatter(x=self.X[feature], y=self.y, s=5)
+            axes[loc // cols][loc % cols].set(xlabel=feature, ylabel='SalePrice')
+        plt.show()
 
-# deal with missing values
-print(f'Number of missing values before imputing: {X.isnull().sum().sum() + X_test.isnull().sum().sum()}')
+        return numerical_vars
 
-fill_with_none = ['Alley', 'FireplaceQu', 'PoolQC', 'Fence', 'MiscFeature', 'MasVnrType',
-                  'BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1', 'BsmtFinType2',
-                  'GarageType', 'GarageFinish', 'GarageQual', 'GarageCond']
+    def normalize_target(self):
+        # check the distribution of SalePrice
+        sns.distplot(self.y, fit=norm)
 
-fill_with_zero = ['LotFrontage', 'LotArea', 'MasVnrArea', 'BsmtFinSF1', 'BsmtFinSF2', 'BsmtUnfSF', 'TotalBsmtSF',
-                  '1stFlrSF', '2ndFlrSF', 'LowQualFinSF', 'GrLivArea', 'BsmtFullBath', 'BsmtHalfBath', 'Fireplaces',
-                  'GarageCars', 'GarageArea', 'GarageYrBlt', 'WoodDeckSF', 'OpenPorchSF', 'EnclosedPorch', '3SsnPorch',
-                  'ScreenPorch', 'PoolArea', 'MiscVal']
+        (mu, sigma) = norm.fit(self.y)
 
-fill_with_most_frequent = ['Electrical', 'Exterior1st', 'Exterior2nd', 'KitchenQual', 'MSZoning', 'SaleType']
+        plt.legend([f'Normal distribution $\mu=$ {mu:.2f} and $\sigma=$ {sigma:.2f} )'], loc='best')
+        plt.ylabel('Frequency')
+        plt.title('SalePrice distribution')
 
-for col in fill_with_none:
-    X[col] = X[col].fillna('None')
-    X_test[col] = X_test[col].fillna('None')
+        # Get also the QQ-plot
+        plt.figure()
+        stats.probplot(self.y.SalePrice, plot=plt)
+        plt.show()
 
-for col in fill_with_zero:
-    X[col] = X[col].fillna(0)
-    X_test[col] = X_test[col].fillna(0)
+        # distribution is right skewed, so logarithmic transformation will be made
+        self.y = np.log(self.y)
 
-for col in fill_with_most_frequent:
-    X[col] = X[col].fillna(X[col].mode()[0])
-    X_test[col] = X_test[col].fillna(X_test[col].mode()[0])
+        # check the distribution of the transformed SalePrice
+        sns.distplot(self.y, fit=norm)
 
-X['Functional'] = X['Functional'].fillna('Typ')
-X_test['Functional'] = X_test['Functional'].fillna('Typ')
+        (mu, sigma) = norm.fit(self.y)
 
-print(f'Number of missing values after imputing: {X.isnull().sum().sum() + X_test.isnull().sum().sum()}')
+        plt.legend([f'Normal distribution $\mu=$ {mu:.2f} and $\sigma=$ {sigma:.2f} )'], loc='best')
+        plt.ylabel('Frequency')
+        plt.title('SalePrice distribution')
 
-# correlation map between the remaining features
-corr_map = X.join(y).corr()
-plt.subplots(figsize=(12, 9))
-sns.heatmap(corr_map, vmax=0.9, square=True)
-plt.show()
+        # Get also the QQ-plot
+        plt.figure()
+        stats.probplot(self.y.SalePrice, plot=plt)
+        plt.show()
 
-# get column names for categorical and numerical features
-categorical_vars = X.select_dtypes(include='object').columns
-numerical_vars = X.columns.difference(categorical_vars)
+    def imputer(self):
+        # deal with missing values
+        missing_values = self.X.isnull().sum().sum() + self.X_test.isnull().sum().sum()
+        print(f'Number of missing values before imputing: {missing_values}')
 
-X_num = X[numerical_vars]
-X_test_num = X_test[numerical_vars]
+        fill_with_none = ['Alley', 'FireplaceQu', 'PoolQC', 'Fence', 'MiscFeature', 'MasVnrType', 'BsmtQual',
+                          'BsmtCond', 'BsmtExposure', 'BsmtFinType1', 'BsmtFinType2', 'GarageType', 'GarageFinish',
+                          'GarageQual', 'GarageCond']
 
-# one hot encode categorical columns
-one_hot_encoder = OneHotEncoder(use_cat_names=True)
+        fill_with_zero = ['LotFrontage', 'LotArea', 'MasVnrArea', 'BsmtFinSF1', 'BsmtFinSF2', 'BsmtUnfSF',
+                          'TotalBsmtSF', '1stFlrSF', '2ndFlrSF', 'LowQualFinSF', 'GrLivArea', 'BsmtFullBath',
+                          'BsmtHalfBath', 'Fireplaces', 'GarageCars', 'GarageArea', 'GarageYrBlt', 'WoodDeckSF',
+                          'OpenPorchSF', 'EnclosedPorch', '3SsnPorch', 'ScreenPorch', 'PoolArea', 'MiscVal']
 
-X_cat = one_hot_encoder.fit_transform(X[categorical_vars])
-X_test_cat = one_hot_encoder.transform(X_test[categorical_vars])
+        fill_with_most_frequent = ['Electrical', 'Exterior1st', 'Exterior2nd', 'KitchenQual', 'MSZoning', 'SaleType']
 
-X = X_num.join(X_cat)
-X_test = X_test_num.join(X_test_cat)
+        for col in fill_with_none:
+            self.X[col] = self.X[col].fillna('None')
+            self.X_test[col] = self.X_test[col].fillna('None')
 
-# check the skew of all numerical features
-skewed_features = X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
-print("Skew in numerical features: \n")
-skewness = pd.DataFrame({'Skew': skewed_features})
-print(skewness)
+        for col in fill_with_zero:
+            self.X[col] = self.X[col].fillna(0)
+            self.X_test[col] = self.X_test[col].fillna(0)
 
-# transform skewed features
-skewed_features = skewness[abs(skewness.Skew) > 1].index
-print(f"There are {skewed_features.size} skewed features")
+        for col in fill_with_most_frequent:
+            self.X[col] = self.X[col].fillna(self.X[col].mode()[0])
+            self.X_test[col] = self.X_test[col].fillna(self.X_test[col].mode()[0])
 
-for feature in skewed_features:
-    X[feature] = np.log1p(X[feature])
-    X_test[feature] = np.log1p(X_test[feature])     # box-cox transformation instead?
+        self.X['Functional'] = self.X['Functional'].fillna('Typ')
+        self.X_test['Functional'] = self.X_test['Functional'].fillna('Typ')
 
-# check the skew of all numerical features again
-skewed_features = X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
-print("Skew in numerical features: \n")
-skewness = pd.DataFrame({'Skew': skewed_features})
-print(skewness)
+        missing_values = self.X.isnull().sum().sum() + self.X_test.isnull().sum().sum()
 
-# standardize data
-std_scaler = StandardScaler()
+        print(f'Number of missing values after imputing: {missing_values}')
 
-X = pd.DataFrame(std_scaler.fit_transform(X), columns=X.columns)
-X_test = pd.DataFrame(std_scaler.transform(X_test), columns=X.columns)
+    def correlation_map(self):
+        # correlation map between the remaining features
+        corr_map = self.X.join(self.y).corr()
+        plt.subplots(figsize=(12, 9))
+        sns.heatmap(corr_map, vmax=0.9, square=True)
+        plt.show()
 
-# dimension reduction
-from sklearn.decomposition import PCA
+    def one_hot_encode(self):
+        # get column names for categorical and numerical features
+        categorical_vars = self.X.select_dtypes(include='object').columns
+        numerical_vars = self.X.columns.difference(categorical_vars)
 
-print(f"Number of features before PCA: {X.shape[1]}")
+        x_num = self.X[numerical_vars]
+        x_test_num = self.X_test[numerical_vars]
 
-pca = PCA(n_components=n_components)
-X_pca = pca.fit_transform(X)
-X_test_pca = pca.transform(X_test)
+        # one hot encode categorical columns
+        one_hot_encoder = OneHotEncoder(use_cat_names=True)
 
-X_pca = pd.DataFrame(X_pca, columns=["PCA" + str(n) for n in range(1, n_components + 1)])
-X_test_pca = pd.DataFrame(X_test_pca)
+        x_cat = one_hot_encoder.fit_transform(self.X[categorical_vars])
+        x_test_cat = one_hot_encoder.transform(self.X_test[categorical_vars])
 
-print(f"Number of features after PCA: {X_pca.shape[1]}")
+        self.X = x_num.join(x_cat)
+        self.X_test = x_test_num.join(x_test_cat)
 
-# splitting the data into training and validation sets
-X_train, X_valid, y_train, y_valid = train_test_split(X_pca, y, train_size=0.8, test_size=0.2, random_state=random_state)
+    def transform_skewed_features(self, numerical_vars):
+        # check the skew of all numerical features
+        skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
+        print("Skew in numerical features: \n")
+        skewness = pd.DataFrame({'Skew': skewed_features})
+        print(skewness)
 
-X_train = sm.add_constant(X_train)
-X_valid = sm.add_constant(X_valid)
-X_test_pca = sm.add_constant(X_test_pca)
+        # transform skewed features
+        skewed_features = skewness[abs(skewness.Skew) > 1].index
+        print(f"There are {skewed_features.size} skewed features")
 
-# OLS
-model = sm.OLS(list(y_train.SalePrice), X_train)
-results = model.fit()
-print(results.summary())
+        for feature in skewed_features:
+            self.X[feature] = np.log1p(self.X[feature])
+            self.X_test[feature] = np.log1p(self.X_test[feature])  # box-cox transformation instead?
 
-# make predictions for validation data
-predictions = results.predict(X_valid)
+        # check the skew of all numerical features again
+        skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
+        print("Skew in numerical features: \n")
+        skewness = pd.DataFrame({'Skew': skewed_features})
+        print(skewness)
 
-plt.show()
+    def standardize_data(self):
+        # standardize data
+        std_scaler = StandardScaler(copy=False)
 
-print("Mean abs error: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(predictions)))
+        self.X = pd.DataFrame(std_scaler.fit_transform(self.X), columns=self.X.columns)
+        self.X_test = pd.DataFrame(std_scaler.transform(self.X_test), columns=self.X.columns)
 
-test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(results.predict(X_test_pca))})
-test_pred.to_csv('submission.csv', index=False)
+    def pca(self):
+        # dimension reduction
+        print(f"Number of features before PCA: {self.X.shape[1]}")
+
+        pca = PCA(n_components=self.n_components)
+
+        self.X = pd.DataFrame(
+            pca.fit_transform(self.X),
+            columns=["PCA" + str(n) for n in range(1, self.n_components + 1)]
+        )
+        self.X_test = pd.DataFrame(
+            pca.transform(self.X_test),
+            columns=["PCA" + str(n) for n in range(1, self.n_components + 1)]
+        )
+
+        print(f"Number of features after PCA: {self.X.shape[1]}")
+
+    def save_data(self):
+        self.X.to_csv('data\\pp_train.csv', index=False)
+        self.X_test.to_csv('data\\pp_test.csv', index=False)
