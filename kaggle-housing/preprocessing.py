@@ -3,8 +3,10 @@ import pandas as pd
 import statsmodels.api as sm
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error
+
+from category_encoders import OneHotEncoder
 
 import matplotlib.pyplot as plt
 
@@ -21,6 +23,7 @@ from math import sqrt, ceil
 train_csv = pathlib.Path(__file__, "..\\data\\train.csv").resolve()
 test_csv = pathlib.Path(__file__, "..\\data\\test.csv").resolve()
 random_state = 237
+n_components = 200
 
 # read data from the provided csv files
 X = pd.read_csv(train_csv)
@@ -32,6 +35,7 @@ X.dropna(axis=0, subset=['SalePrice'], inplace=True)
 # set labels to variable y
 y = pd.DataFrame(X.SalePrice, columns=['SalePrice'])
 X.drop(['Id', 'Utilities', 'SalePrice'], axis=1, inplace=True)
+test_ids = X_test.Id
 X_test.drop(['Id', 'Utilities'], axis=1, inplace=True)
 
 # make MSSubClass categorical
@@ -55,7 +59,7 @@ for feature in nv_for_detection:
 plt.show()
 
 # deleting outliers
-outliers = X[(X[nv_for_detection[5]] > 4000) & (y.SalePrice < 500000) | (X[nv_for_detection[0]] > 100000)].index
+outliers = X[(X[nv_for_detection[5]] > 4000) & (y.SalePrice < 500000) | (X[nv_for_detection[0]] > 150000)].index
 X = X.drop(outliers)
 y = y.drop(outliers)
 
@@ -144,16 +148,10 @@ X_num = X[numerical_vars]
 X_test_num = X_test[numerical_vars]
 
 # one hot encode categorical columns
-one_hot_encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+one_hot_encoder = OneHotEncoder(use_cat_names=True)
 
-X_cat = pd.DataFrame(
-    one_hot_encoder.fit_transform(X[categorical_vars]),
-    columns=one_hot_encoder.get_feature_names(categorical_vars)
-)
-X_test_cat = pd.DataFrame(
-    one_hot_encoder.transform(X_test[categorical_vars]),
-    columns=X_cat.columns
-)
+X_cat = one_hot_encoder.fit_transform(X[categorical_vars])
+X_test_cat = one_hot_encoder.transform(X_test[categorical_vars])
 
 X = X_num.join(X_cat)
 X_test = X_test_num.join(X_test_cat)
@@ -165,7 +163,7 @@ skewness = pd.DataFrame({'Skew': skewed_features})
 print(skewness)
 
 # transform skewed features
-skewed_features = skewness[abs(skewness.Skew) > 0.75].index
+skewed_features = skewness[abs(skewness.Skew) > 1].index
 print(f"There are {skewed_features.size} skewed features")
 
 for feature in skewed_features:
@@ -173,10 +171,10 @@ for feature in skewed_features:
     X_test[feature] = np.log1p(X_test[feature])     # box-cox transformation instead?
 
 # check the skew of all numerical features again
-# skewed_features = X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
-# print("Skew in numerical features: \n")
-# skewness = pd.DataFrame({'Skew': skewed_features})
-# print(skewness)
+skewed_features = X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
+print("Skew in numerical features: \n")
+skewness = pd.DataFrame({'Skew': skewed_features})
+print(skewness)
 
 # standardize data
 std_scaler = StandardScaler()
@@ -184,5 +182,38 @@ std_scaler = StandardScaler()
 X = pd.DataFrame(std_scaler.fit_transform(X), columns=X.columns)
 X_test = pd.DataFrame(std_scaler.transform(X_test), columns=X.columns)
 
+# dimension reduction
+from sklearn.decomposition import PCA
+
+print(f"Number of features before PCA: {X.shape[1]}")
+
+pca = PCA(n_components=n_components)
+X_pca = pca.fit_transform(X)
+X_test_pca = pca.transform(X_test)
+
+X_pca = pd.DataFrame(X_pca, columns=["PCA" + str(n) for n in range(1, n_components + 1)])
+X_test_pca = pd.DataFrame(X_test_pca)
+
+print(f"Number of features after PCA: {X_pca.shape[1]}")
+
 # splitting the data into training and validation sets
-X_train, X_valid, y_train, y_valid = train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=random_state)
+X_train, X_valid, y_train, y_valid = train_test_split(X_pca, y, train_size=0.8, test_size=0.2, random_state=random_state)
+
+X_train = sm.add_constant(X_train)
+X_valid = sm.add_constant(X_valid)
+X_test_pca = sm.add_constant(X_test_pca)
+
+# OLS
+model = sm.OLS(list(y_train.SalePrice), X_train)
+results = model.fit()
+print(results.summary())
+
+# make predictions for validation data
+predictions = results.predict(X_valid)
+
+plt.show()
+
+print("Mean abs error: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(predictions)))
+
+test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(results.predict(X_test_pca))})
+test_pred.to_csv('submission.csv', index=False)

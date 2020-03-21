@@ -28,6 +28,7 @@ dependencies:
   - wheel=0.34.2=py37_0
   - wincertstore=0.2=py37_0
   - pip:
+    - category-encoders==2.1.0
     - cycler==0.10.0
     - joblib==0.14.1
     - kiwisolver==1.1.0
