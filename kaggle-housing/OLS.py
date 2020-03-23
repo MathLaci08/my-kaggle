@@ -1,7 +1,5 @@
 import statsmodels.api as sm
 
-import matplotlib.pyplot as plt
-
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 
@@ -22,7 +20,7 @@ def predict(x, x_test):
 
     # splitting the data into training and validation sets
     x_train, x_valid, y_train, y_valid = train_test_split(
-        x, y, train_size=0.9, test_size=0.1, random_state=random_state
+        x, y, train_size=0.8, test_size=0.2, random_state=random_state
     )
 
     x_train = sm.add_constant(x_train)
@@ -36,9 +34,7 @@ def predict(x, x_test):
     # print(results.summary())
 
     # make predictions for validation data
-    predictions = results.predict(x_valid)
-
-    print("Mean abs error: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(predictions)))
+    print("Mean abs error: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(results.predict(x_valid))))
 
     test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(results.predict(x_test))})
     test_pred.to_csv('submission.csv', index=False)

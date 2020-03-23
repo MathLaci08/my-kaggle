@@ -18,12 +18,24 @@ from math import sqrt, ceil
 
 
 class PreProcessing:
+    """
+    Class for data preprocessing related methods.
+    Many ideas below came from: https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard/notebook
+    """
     # this should go to a config file with all the other (future) hyper-parameters
-    n_components = 200
+    n_components = 150
 
-    def __init__(self):
+    def __init__(self, force=False):
+        """
+        Class instance initializer method.
+
+        :param force: Boolean parameter. If True, previously created preprocessed data ignored, and steps will be
+        re-computed. Defaults to False.
+        """
         self.already_preprocessed = False
         try:
+            if force:
+                raise RuntimeWarning
             pp_train_csv = pathlib.Path(__file__, "..\\data\\pp_train.csv").resolve()
             pp_test_csv = pathlib.Path(__file__, "..\\data\\pp_test.csv").resolve()
 
@@ -31,7 +43,7 @@ class PreProcessing:
             self.pp_X_test = pd.read_csv(pp_test_csv)
 
             self.already_preprocessed = True
-        except FileNotFoundError:
+        except (FileNotFoundError, RuntimeWarning):
             self.pp_X = None
             self.pp_X_test = None
             train_csv = pathlib.Path(__file__, "..\\data\\train.csv").resolve()
@@ -43,27 +55,40 @@ class PreProcessing:
             self.X_test = pd.read_csv(test_csv)
 
     def get_preprocessed_data(self):
+        """
+        Method for determining the preprocessed data. If the data set haven't been preprocessed before, or forced to be
+        ignored, the method calls all the necessary functions for the pre-processing.
+
+        :return: The preprocessed data.
+        """
         if self.already_preprocessed:
             return self.pp_X, self.pp_X_test
         else:
-            test_ids = self.separate_target()
-            numerical_vars = self.detect_outliers()
-            self.normalize_target()
-            self.imputer()
-            self.correlation_map()
-            self.one_hot_encode()
-            self.transform_skewed_features(numerical_vars)
-            self.standardize_data()
-            self.pca()
+            test_ids = self.__separate_target()
+            numerical_vars = self.__detect_outliers()
+            self.__normalize_target()
+            self.__imputer()
+            self.__correlation_map()
+            self.__one_hot_encode()
+            self.__transform_skewed_features(numerical_vars)
+            self.__standardize_data()
+            self.__pca()
 
             self.X = self.X.join(self.y)
             self.X_test = test_ids.to_frame().join(self.X_test)
 
-            self.save_data()
+            self.__save_data()
 
             return self.X, self.X_test
 
-    def separate_target(self):
+    def __separate_target(self):
+        """
+        Private function for some preliminary steps. Drops non-labelled data, separates y from X and the test
+        identifiers from the test set. Also converts the 'MSSubClass' feature to 'object' type (because it is
+        categorical).
+
+        :return: The test identifiers for future usage.
+        """
         # drop rows without labels
         self.X.dropna(axis=0, subset=['SalePrice'], inplace=True)
 
@@ -79,7 +104,14 @@ class PreProcessing:
 
         return test_ids
 
-    def detect_outliers(self):
+    def __detect_outliers(self):
+        """
+        Private function for detecting the outliers in the data set. First determines those numerical variables which
+        have much unique values, and then plots the target variable as the function of these features. Base on the
+        graphs it drops the outliers from the data, resets indices for X and y and finally plots the functions again.
+
+        :return: Set of all numerical feature names.
+        """
         # get numerical features
         numerical_vars = self.X.select_dtypes(exclude="object").columns
         nv_for_detection = pd.Index([f for f in numerical_vars if self.X[f].nunique() > 500])
@@ -114,7 +146,11 @@ class PreProcessing:
 
         return numerical_vars
 
-    def normalize_target(self):
+    def __normalize_target(self):
+        """
+        This private function checks the distribution of the target variable and then transforms it with a logarithmic
+        transformation (as the variable is right-skewed). Finally plots the distribution again.
+        """
         # check the distribution of SalePrice
         sns.distplot(self.y, fit=norm)
 
@@ -146,7 +182,11 @@ class PreProcessing:
         stats.probplot(self.y.SalePrice, plot=plt)
         plt.show()
 
-    def imputer(self):
+    def __imputer(self):
+        """
+        Private function for dealing with missing values in the data sets. The method first creates lists of the
+        feature names based on how to impute data in them, then fills the columns with appropriate values.
+        """
         # deal with missing values
         missing_values = self.X.isnull().sum().sum() + self.X_test.isnull().sum().sum()
         print(f'Number of missing values before imputing: {missing_values}')
@@ -181,14 +221,20 @@ class PreProcessing:
 
         print(f'Number of missing values after imputing: {missing_values}')
 
-    def correlation_map(self):
+    def __correlation_map(self):
+        """
+        Private function for plotting the correlation map between the features.
+        """
         # correlation map between the remaining features
         corr_map = self.X.join(self.y).corr()
         plt.subplots(figsize=(12, 9))
         sns.heatmap(corr_map, vmax=0.9, square=True)
         plt.show()
 
-    def one_hot_encode(self):
+    def __one_hot_encode(self):
+        """
+        This private method stands for one-hot encoding categorical variables.
+        """
         # get column names for categorical and numerical features
         categorical_vars = self.X.select_dtypes(include='object').columns
         numerical_vars = self.X.columns.difference(categorical_vars)
@@ -205,7 +251,12 @@ class PreProcessing:
         self.X = x_num.join(x_cat)
         self.X_test = x_test_num.join(x_test_cat)
 
-    def transform_skewed_features(self, numerical_vars):
+    def __transform_skewed_features(self, numerical_vars):
+        """
+        Private method for transforming features with high skew.
+
+        :param numerical_vars: Set of all original numerical variables.
+        """
         # check the skew of all numerical features
         skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
         print("Skew in numerical features: \n")
@@ -226,14 +277,21 @@ class PreProcessing:
         skewness = pd.DataFrame({'Skew': skewed_features})
         print(skewness)
 
-    def standardize_data(self):
+    def __standardize_data(self):
+        """
+        This private function's job is the standardization of all the variables.
+        """
         # standardize data
         std_scaler = StandardScaler(copy=False)
 
         self.X = pd.DataFrame(std_scaler.fit_transform(self.X), columns=self.X.columns)
         self.X_test = pd.DataFrame(std_scaler.transform(self.X_test), columns=self.X.columns)
 
-    def pca(self):
+    def __pca(self):
+        """
+        This private function do the principal component analysis on our data, and as a result, dimension reduction
+        will be made.
+        """
         # dimension reduction
         print(f"Number of features before PCA: {self.X.shape[1]}")
 
@@ -250,6 +308,9 @@ class PreProcessing:
 
         print(f"Number of features after PCA: {self.X.shape[1]}")
 
-    def save_data(self):
+    def __save_data(self):
+        """
+        Private method for saving the preprocessed data to csv files.
+        """
         self.X.to_csv('data\\pp_train.csv', index=False)
         self.X_test.to_csv('data\\pp_test.csv', index=False)
