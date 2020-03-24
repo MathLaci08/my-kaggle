@@ -2,15 +2,14 @@ import pandas as pd
 import numpy as np
 from i_model import IModel
 
-from xgboost import XGBRegressor
-
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 
 random_state = 237
 
 
-class XGB(IModel):
+class RandomForest(IModel):
     def __init__(self):
         super().__init__()
 
@@ -33,19 +32,17 @@ class XGB(IModel):
             x, y, train_size=0.8, test_size=0.2, random_state=random_state
         )
 
-        model = XGBRegressor(n_estimators=1000, learning_rate=0.01, random_state=random_state)
-
-        model.fit(
-            x_train, y_train, eval_metric='mae', early_stopping_rounds=5, eval_set=[(x_train, y_train)], verbose=False
-        )
+        model = RandomForestRegressor(n_estimators=20, criterion='mae', random_state=random_state)
+        y_train = y_train.SalePrice.ravel()
+        model.fit(x_train, y_train)
 
         # make predictions for validation data, then transform
         prediction = pd.DataFrame(model.predict(x_valid), columns=['SalePrice'])
         prediction = prediction * sigma + mu
         y_valid = y_valid * sigma + mu
 
-        print("XGBoost MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction)))
+        print("Random tree MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction)))
 
         test_pred = pd.DataFrame(model.predict(x_test), columns=['SalePrice']) * sigma + mu
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})
-        test_pred.to_csv('submission_XGB.csv', index=False)
+        test_pred.to_csv('submission_random.csv', index=False)

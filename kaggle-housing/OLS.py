@@ -1,4 +1,5 @@
 import statsmodels.api as sm
+from i_model import IModel
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
@@ -10,31 +11,44 @@ import pandas as pd
 random_state = 237
 
 
-def predict(x, x_test):
-    # cut off target variable and id from the data
-    y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
-    x.drop(['SalePrice'], axis=1, inplace=True)
+class OLS(IModel):
+    def __init__(self):
+        super().__init__()
 
-    test_ids = x_test.Id
-    x_test.drop(['Id'], axis=1, inplace=True)
+    def predict(self, x, x_test):
+        # cut off target variable and id from the data
+        y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
+        x.drop(['SalePrice'], axis=1, inplace=True)
 
-    # splitting the data into training and validation sets
-    x_train, x_valid, y_train, y_valid = train_test_split(
-        x, y, train_size=0.8, test_size=0.2, random_state=random_state
-    )
+        test_ids = x_test.Id
+        x_test.drop(['Id'], axis=1, inplace=True)
 
-    x_train = sm.add_constant(x_train)
-    x_valid = sm.add_constant(x_valid)
-    x_test = sm.add_constant(x_test)
+        # standardize target variable
+        mu = y.mean()
+        sigma = y.std()
 
-    # OLS
-    model = sm.OLS(list(y_train.SalePrice), x_train)
-    results = model.fit()
+        y = (y - mu) / sigma
 
-    # print(results.summary())
+        # splitting the data into training and validation sets
+        x_train, x_valid, y_train, y_valid = train_test_split(
+            x, y, train_size=0.8, test_size=0.2, random_state=random_state
+        )
 
-    # make predictions for validation data
-    print("Mean abs error: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(results.predict(x_valid))))
+        x_train = sm.add_constant(x_train)
+        x_valid = sm.add_constant(x_valid)
+        x_test = sm.add_constant(x_test)
 
-    test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(results.predict(x_test))})
-    test_pred.to_csv('submission.csv', index=False)
+        # OLS
+        model = sm.OLS(list(y_train.SalePrice), x_train)
+        results = model.fit()
+
+        # make predictions for validation data, then transform
+        prediction = pd.DataFrame(results.predict(x_valid), columns=['SalePrice'])
+        prediction = prediction * sigma + mu
+        y_valid = y_valid * sigma + mu
+
+        print("OLS MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction.SalePrice)))
+
+        test_pred = pd.DataFrame(results.predict(x_test), columns=['SalePrice']) * sigma + mu
+        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})
+        test_pred.to_csv('submission_OLS.csv', index=False)

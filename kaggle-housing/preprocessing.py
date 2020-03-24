@@ -15,6 +15,7 @@ from scipy.stats import norm, skew
 
 import pathlib
 from math import sqrt, ceil
+import logging
 
 
 class PreProcessing:
@@ -22,8 +23,6 @@ class PreProcessing:
     Class for data preprocessing related methods.
     Many ideas below came from: https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard/notebook
     """
-    # this should go to a config file with all the other (future) hyper-parameters
-    n_components = 150
 
     def __init__(self, force=False):
         """
@@ -54,15 +53,16 @@ class PreProcessing:
             self.y = None
             self.X_test = pd.read_csv(test_csv)
 
-    def get_preprocessed_data(self):
+    def process_data(self, perform_pca=False, n_components=150):
         """
         Method for determining the preprocessed data. If the data set haven't been preprocessed before, or forced to be
         ignored, the method calls all the necessary functions for the pre-processing.
 
-        :return: The preprocessed data.
+        :param perform_pca: if True, principal component analysis will be performed during the pre processing
+        :param n_components: the number of components in the pca
         """
         if self.already_preprocessed:
-            return self.pp_X, self.pp_X_test
+            logging.info("Data already preprocessed. Call load_data() function!")
         else:
             test_ids = self.__separate_target()
             numerical_vars = self.__detect_outliers()
@@ -72,14 +72,30 @@ class PreProcessing:
             self.__one_hot_encode()
             self.__transform_skewed_features(numerical_vars)
             self.__standardize_data()
-            self.__pca()
+
+            if perform_pca:
+                self.__pca(n_components)
 
             self.X = self.X.join(self.y)
             self.X_test = test_ids.to_frame().join(self.X_test)
 
             self.__save_data()
 
-            return self.X, self.X_test
+    def load_data(self):
+        """
+        Loads the previously processed data from the saved csv files.
+        :return: train and test set if data is preprocessed, else None.
+        """
+        if self.already_preprocessed:
+            pp_train_csv = pathlib.Path(__file__, "..\\data\\pp_train.csv").resolve()
+            pp_test_csv = pathlib.Path(__file__, "..\\data\\pp_test.csv").resolve()
+
+            self.pp_X = pd.read_csv(pp_train_csv)
+            self.pp_X_test = pd.read_csv(pp_test_csv)
+
+            return self.pp_X, self.pp_X_test
+        else:
+            logging.info("Data is not preprocessed. Call process_data() function before loading!")
 
     def __separate_target(self):
         """
@@ -287,7 +303,7 @@ class PreProcessing:
         self.X = pd.DataFrame(std_scaler.fit_transform(self.X), columns=self.X.columns)
         self.X_test = pd.DataFrame(std_scaler.transform(self.X_test), columns=self.X.columns)
 
-    def __pca(self):
+    def __pca(self, n_components):
         """
         This private function do the principal component analysis on our data, and as a result, dimension reduction
         will be made.
@@ -295,15 +311,15 @@ class PreProcessing:
         # dimension reduction
         print(f"Number of features before PCA: {self.X.shape[1]}")
 
-        pca = PCA(n_components=self.n_components)
+        pca = PCA(n_components=n_components)
 
         self.X = pd.DataFrame(
             pca.fit_transform(self.X),
-            columns=["PCA" + str(n) for n in range(1, self.n_components + 1)]
+            columns=["PCA" + str(n) for n in range(1, n_components + 1)]
         )
         self.X_test = pd.DataFrame(
             pca.transform(self.X_test),
-            columns=["PCA" + str(n) for n in range(1, self.n_components + 1)]
+            columns=["PCA" + str(n) for n in range(1, n_components + 1)]
         )
 
         print(f"Number of features after PCA: {self.X.shape[1]}")
@@ -314,3 +330,5 @@ class PreProcessing:
         """
         self.X.to_csv('data\\pp_train.csv', index=False)
         self.X_test.to_csv('data\\pp_test.csv', index=False)
+
+        self.already_preprocessed = True
