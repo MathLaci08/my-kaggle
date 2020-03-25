@@ -15,6 +15,12 @@ class XGB(IModel):
         super().__init__()
 
     def predict(self, x, x_test):
+        """
+        IModel's predict functions XGBoost implementation.
+
+        :param x: training data set
+        :param x_test: test data set
+        """
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
@@ -30,7 +36,7 @@ class XGB(IModel):
 
         # splitting the data into training and validation sets
         x_train, x_valid, y_train, y_valid = train_test_split(
-            x, y, train_size=0.8, test_size=0.2, random_state=random_state
+            x, y, train_size=0.9, test_size=0.1, random_state=random_state
         )
 
         model = XGBRegressor(n_estimators=1000, learning_rate=0.01, random_state=random_state)
@@ -44,8 +50,8 @@ class XGB(IModel):
         prediction = prediction * sigma + mu
         y_valid = y_valid * sigma + mu
 
-        print("XGBoost MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction)))
+        print("XGBoost validation MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction)))
 
         test_pred = pd.DataFrame(model.predict(x_test), columns=['SalePrice']) * sigma + mu
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})
-        test_pred.to_csv('submission_XGB.csv', index=False)
+        test_pred.to_csv('submissions\\submission_XGB.csv', index=False)

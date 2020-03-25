@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.metrics import mean_absolute_error
 from i_model import IModel
 
 from keras.callbacks import ModelCheckpoint
@@ -14,6 +15,12 @@ class NeuralNetwork(IModel):
         super().__init__()
 
     def predict(self, x, x_test):
+        """
+        IModel's predict functions NN implementation.
+
+        :param x: training data set
+        :param x_test: test data set
+        """
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
@@ -50,14 +57,18 @@ class NeuralNetwork(IModel):
         callbacks_list = [checkpoint]
 
         # fit the model
-        model.fit(x, y, epochs=500, batch_size=32, validation_split=0.2, callbacks=callbacks_list)
+        # model.fit(x, y, epochs=500, batch_size=32, validation_split=0.2, callbacks=callbacks_list)
 
         # load the best weight
         model.load_weights(checkpoint_name)
         model.compile(loss='mean_absolute_error', optimizer='adam', metrics=['mean_absolute_error'])
 
+        y_valid = np.exp(pd.DataFrame(y.SalePrice.values, columns=['SalePrice']) * sigma + mu)
+        pred_valid = np.exp(pd.DataFrame(model.predict(x.to_numpy()), columns=['SalePrice']) * sigma + mu)
+        print("NN train MAE: ", mean_absolute_error(y_valid, pred_valid))
+
         predictions = pd.DataFrame(model.predict(x_test.to_numpy()), columns=['SalePrice'])
         predictions = predictions * sigma + mu
 
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(predictions.SalePrice)})
-        test_pred.to_csv('submission_NN.csv', index=False)
+        test_pred.to_csv('submissions\\submission_NN.csv', index=False)

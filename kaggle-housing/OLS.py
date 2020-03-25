@@ -16,6 +16,12 @@ class OLS(IModel):
         super().__init__()
 
     def predict(self, x, x_test):
+        """
+        IModel's predict functions OLS implementation.
+
+        :param x: training data set
+        :param x_test: test data set
+        """
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
@@ -31,7 +37,7 @@ class OLS(IModel):
 
         # splitting the data into training and validation sets
         x_train, x_valid, y_train, y_valid = train_test_split(
-            x, y, train_size=0.8, test_size=0.2, random_state=random_state
+            x, y, train_size=0.9, test_size=0.1, random_state=random_state
         )
 
         x_train = sm.add_constant(x_train)
@@ -47,8 +53,8 @@ class OLS(IModel):
         prediction = prediction * sigma + mu
         y_valid = y_valid * sigma + mu
 
-        print("OLS MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction.SalePrice)))
+        print("OLS validation MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction.SalePrice)))
 
         test_pred = pd.DataFrame(results.predict(x_test), columns=['SalePrice']) * sigma + mu
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})
-        test_pred.to_csv('submission_OLS.csv', index=False)
+        test_pred.to_csv('submissions\\submission_OLS.csv', index=False)
