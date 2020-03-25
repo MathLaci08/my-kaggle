@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import logging
 from i_model import IModel
 
 from xgboost import XGBRegressor
@@ -21,6 +22,8 @@ class XGB(IModel):
         :param x: training data set
         :param x_test: test data set
         """
+
+        logging.info("Performing XGBoost prediction...")
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
@@ -49,9 +52,12 @@ class XGB(IModel):
         prediction = pd.DataFrame(model.predict(x_valid), columns=['SalePrice'])
         prediction = prediction * sigma + mu
         y_valid = y_valid * sigma + mu
+        y_valid = y_valid.SalePrice.values
 
-        print("XGBoost validation MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction)))
+        logging.info(f"XGBoost validation MAE: {mean_absolute_error(np.exp(y_valid), np.exp(prediction))}")
 
         test_pred = pd.DataFrame(model.predict(x_test), columns=['SalePrice']) * sigma + mu
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})
         test_pred.to_csv('submissions\\submission_XGB.csv', index=False)
+
+        logging.info("DONE!")

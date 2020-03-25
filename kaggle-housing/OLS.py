@@ -1,4 +1,5 @@
 import statsmodels.api as sm
+import logging
 from i_model import IModel
 
 from sklearn.model_selection import train_test_split
@@ -22,6 +23,8 @@ class OLS(IModel):
         :param x: training data set
         :param x_test: test data set
         """
+
+        logging.info("Performing OLS prediction...")
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
@@ -52,8 +55,9 @@ class OLS(IModel):
         prediction = pd.DataFrame(results.predict(x_valid), columns=['SalePrice'])
         prediction = prediction * sigma + mu
         y_valid = y_valid * sigma + mu
+        y_valid = y_valid.SalePrice.values
 
-        print("OLS validation MAE: ", mean_absolute_error(np.exp(y_valid.SalePrice.values), np.exp(prediction.SalePrice)))
+        logging.info(f"OLS validation MAE: {mean_absolute_error(np.exp(y_valid), np.exp(prediction.SalePrice))}")
 
         test_pred = pd.DataFrame(results.predict(x_test), columns=['SalePrice']) * sigma + mu
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})

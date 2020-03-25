@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import logging
 from sklearn.metrics import mean_absolute_error
 from i_model import IModel
 
@@ -21,6 +22,8 @@ class NeuralNetwork(IModel):
         :param x: training data set
         :param x_test: test data set
         """
+
+        logging.info("Performing NN prediction...")
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
@@ -49,7 +52,6 @@ class NeuralNetwork(IModel):
 
         # compile the network
         model.compile(loss='mean_absolute_error', optimizer='adam', metrics=['mean_absolute_error'])
-        print(model.summary())
 
         # create checkpoints
         checkpoint_name = 'Best-model.hdf5'
@@ -65,10 +67,12 @@ class NeuralNetwork(IModel):
 
         y_valid = np.exp(pd.DataFrame(y.SalePrice.values, columns=['SalePrice']) * sigma + mu)
         pred_valid = np.exp(pd.DataFrame(model.predict(x.to_numpy()), columns=['SalePrice']) * sigma + mu)
-        print("NN train MAE: ", mean_absolute_error(y_valid, pred_valid))
+        logging.info(f"NN train MAE: {mean_absolute_error(y_valid, pred_valid)}")
 
         predictions = pd.DataFrame(model.predict(x_test.to_numpy()), columns=['SalePrice'])
         predictions = predictions * sigma + mu
 
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(predictions.SalePrice)})
         test_pred.to_csv('submissions\\submission_NN.csv', index=False)
+
+        logging.info("DONE!")
