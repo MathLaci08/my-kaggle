@@ -65,14 +65,18 @@ class NeuralNetwork(IModel):
         model.load_weights(checkpoint_name)
         model.compile(loss='mean_absolute_error', optimizer='adam', metrics=['mean_absolute_error'])
 
-        y_valid = np.exp(pd.DataFrame(y.SalePrice.values, columns=['SalePrice']) * sigma + mu)
-        pred_valid = np.exp(pd.DataFrame(model.predict(x.to_numpy()), columns=['SalePrice']) * sigma + mu)
-        logging.info(f"NN train MAE: {mean_absolute_error(y_valid, pred_valid)}")
+        y_valid = self.inverse_transform(pd.DataFrame(y[-200:].SalePrice.values, columns=['SalePrice']), mu, sigma)
+        pred_valid = self.inverse_transform(
+            pd.DataFrame(model.predict(x[-200:].to_numpy()), columns=['SalePrice']), mu, sigma
+        )
 
-        predictions = pd.DataFrame(model.predict(x_test.to_numpy()), columns=['SalePrice'])
-        predictions = predictions * sigma + mu
+        logging.info(f"NN validation MAE: {mean_absolute_error(y_valid, pred_valid)}")
 
-        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(predictions.SalePrice)})
+        predictions = self.inverse_transform(
+            pd.DataFrame(model.predict(x_test.to_numpy()), columns=['SalePrice']), mu, sigma
+        )
+
+        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': predictions})
         test_pred.to_csv('submissions\\submission_NN.csv', index=False)
 
         logging.info("DONE!")

@@ -1,5 +1,6 @@
 import abc
 import pandas as pd
+import numpy as np
 
 
 class IModel(abc.ABC):
@@ -19,3 +20,21 @@ class IModel(abc.ABC):
         :param x_test: test data set
         """
         pass
+
+    @staticmethod
+    def inverse_transform(data_frame: pd.DataFrame, mu: float, sigma: float) -> np.array:
+        """
+        This method transforms the data back to its original scale: de-standardize, get its exponential and finally
+        rounds to the nearest 100 decimal.
+
+        :param data_frame: the prediction of the model
+        :param mu: mean of the original target variable
+        :param sigma: standard deviation of the original variable
+        :return: the transformed data frame
+        """
+
+        data_frame = data_frame * sigma + mu
+        data_frame = np.exp(data_frame['SalePrice'].values)
+        data_frame = np.around(data_frame).astype(int)
+
+        return data_frame

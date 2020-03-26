@@ -45,15 +45,13 @@ class DecisionTree(IModel):
         model.fit(x_train, y_train)
 
         # make predictions for validation data, then transform
-        prediction = pd.DataFrame(model.predict(x_valid), columns=['SalePrice'])
-        prediction = prediction * sigma + mu
-        y_valid = y_valid * sigma + mu
-        y_valid = y_valid.SalePrice.values
+        y_valid = self.inverse_transform(y_valid, mu, sigma)
+        prediction = self.inverse_transform(pd.DataFrame(model.predict(x_valid), columns=['SalePrice']), mu, sigma)
 
-        logging.info(f"Decision tree validation MAE: {mean_absolute_error(np.exp(y_valid), np.exp(prediction))}")
+        logging.info(f"Decision tree validation MAE: {mean_absolute_error(y_valid, prediction)}")
 
-        test_pred = pd.DataFrame(model.predict(x_test), columns=['SalePrice']) * sigma + mu
-        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': np.exp(test_pred.SalePrice)})
+        test_pred = self.inverse_transform(pd.DataFrame(model.predict(x_test), columns=['SalePrice']), mu, sigma)
+        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': test_pred})
         test_pred.to_csv('submissions\\submission_decision.csv', index=False)
 
         logging.info("DONE!")

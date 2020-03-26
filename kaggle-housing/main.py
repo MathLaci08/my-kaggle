@@ -1,6 +1,7 @@
 import pathlib
 import logging
 import pandas as pd
+import numpy as np
 import preprocessing
 
 from OLS import OLS
@@ -39,4 +40,4 @@ for model in models:
 
 
 all_in_one.SalePrice = all_in_one.SalePrice / len(models)
-all_in_one.to_csv('submissions\\submission.csv', index=False)
+np.around(all_in_one).astype(int).to_csv('submissions\\submission.csv', index=False)
