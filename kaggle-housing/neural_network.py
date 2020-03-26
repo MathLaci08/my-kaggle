@@ -59,7 +59,7 @@ class NeuralNetwork(IModel):
         callbacks_list = [checkpoint]
 
         # fit the model
-        # model.fit(x, y, epochs=500, batch_size=32, validation_split=0.2, callbacks=callbacks_list)
+        model.fit(x, y, epochs=500, batch_size=32, validation_split=0.2, callbacks=callbacks_list)
 
         # load the best weight
         model.load_weights(checkpoint_name)
