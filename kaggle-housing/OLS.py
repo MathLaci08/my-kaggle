@@ -5,7 +5,6 @@ from i_model import IModel
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 
-import numpy as np
 import pandas as pd
 
 # this should go to a config file with all the other (future) hyper-parameters

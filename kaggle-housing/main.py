@@ -9,12 +9,13 @@ from decision_tree import DecisionTree
 from random_forest import RandomForest
 from extreme_grad_boost import XGB
 from neural_network import NeuralNetwork
+from linear_ridge import LinearRidge
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-models = ['NN', 'XGB', 'OLS', 'random', 'decision']
+models = ['XGB', 'ridge', 'NN', 'OLS', 'random', 'decision']
 submissions_dir = pathlib.Path(__file__, "..\\submissions").resolve()
 logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)s')
 
@@ -23,11 +24,12 @@ if not submissions_dir.exists():
 
 pp = preprocessing.PreProcessing()
 
-NeuralNetwork().predict(*pp.load_data())
-XGB().predict(*pp.load_data())
-OLS().predict(*pp.load_data(with_pca=True))
-RandomForest().predict(*pp.load_data())
-DecisionTree().predict(*pp.load_data())
+# NeuralNetwork().predict(*pp.load_data())
+# XGB().predict(*pp.load_data())
+LinearRidge().predict(*pp.load_data())
+# OLS().predict(*pp.load_data(with_pca=True))
+# RandomForest().predict(*pp.load_data())
+# DecisionTree().predict(*pp.load_data())
 
 all_in_one = None
 
