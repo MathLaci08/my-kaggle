@@ -1,26 +1,29 @@
 import pandas as pd
 import numpy as np
 import logging
+from typing import Union
 from i_model import IModel
 
 from xgboost import XGBRegressor
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split, cross_validate
+from sklearn.metrics import mean_absolute_error, make_scorer
 
 random_state = 237
+n_split = 5
 
 
 class XGB(IModel):
     def __init__(self):
         super().__init__()
 
-    def predict(self, x, x_test):
+    def predict(self, x, x_test, cv=False):
         """
         IModel's predict functions XGBoost implementation.
 
         :param x: training data set
         :param x_test: test data set
+        :param cv: True if prediction should be made with cross-validation
         """
 
         logging.info("Performing XGBoost prediction...")
@@ -37,25 +40,69 @@ class XGB(IModel):
 
         y = (y - mu) / sigma
 
-        # splitting the data into training and validation sets
-        x_train, x_valid, y_train, y_valid = train_test_split(
-            x, y, train_size=0.9, test_size=0.1, random_state=random_state
-        )
+        def dse_mae(y_true, y_pred):
+            return mean_absolute_error(
+                self.inverse_transform(y_true, mu, sigma), self.inverse_transform(y_pred, mu, sigma)
+            )
 
-        model = XGBRegressor(n_estimators=1000, learning_rate=0.01, random_state=random_state)
+        scoring = make_scorer(dse_mae, greater_is_better=False)
 
-        model.fit(
-            x_train, y_train, eval_metric='mae', early_stopping_rounds=5, eval_set=[(x_train, y_train)], verbose=False
-        )
+        if cv:
+            model = XGBRegressor(n_estimators=1000, learning_rate=0.01, random_state=random_state)
 
-        # make predictions for validation data, then transform
-        y_valid = self.inverse_transform(y_valid, mu, sigma)
-        prediction = self.inverse_transform(pd.DataFrame(model.predict(x_valid), columns=['SalePrice']), mu, sigma)
+            fit_params = {
+                'eval_set': [(x, y)],
+                'eval_metric': 'mae',
+                'early_stopping_rounds': 5,
+                'verbose': False
+            }
+            scores = cross_validate(
+                model, x, y, cv=n_split, scoring=scoring, return_estimator=True, fit_params=fit_params
+            )
+            estimators = scores["estimator"]
+            logs = [f'Model evaluation {i + 1} of {n_split}: {-1 * scores["test_score"][i]}' for i in range(n_split)]
+            logging.info('XGBoost validation MAE:\n\n' + '\n'.join(logs))
 
-        logging.info(f"XGBoost validation MAE: {mean_absolute_error(y_valid, prediction)}")
+            test_pred = None
 
-        test_pred = self.inverse_transform(pd.DataFrame(model.predict(x_test), columns=['SalePrice']), mu, sigma)
+            for e in estimators:
+                new_pred = self.inverse_transform(pd.DataFrame(e.predict(x_test), columns=['SalePrice']), mu, sigma)
+                if test_pred is None:
+                    test_pred = new_pred
+                else:
+                    test_pred += new_pred
+
+            test_pred = (test_pred / len(estimators)).astype(int)
+        else:
+            model = XGBRegressor(n_estimators=1000, learning_rate=0.01, random_state=random_state)
+
+            # splitting the data into training and validation sets
+            x_train, x_valid, y_train, y_valid = train_test_split(
+                x, y, train_size=0.9, test_size=0.1, random_state=random_state
+            )
+
+            model.fit(
+                x_train, y_train, eval_set=[(x_train, y_train)],
+                eval_metric='mae', early_stopping_rounds=5, verbose=False
+            )
+
+            # make predictions for validation data, then transform
+            y_valid = self.inverse_transform(y_valid, mu, sigma)
+            prediction = self.inverse_transform(pd.DataFrame(model.predict(x_valid), columns=['SalePrice']), mu, sigma)
+
+            logging.info(f"XGBoost validation MAE: {mean_absolute_error(y_valid, prediction)}")
+
+            test_pred = self.inverse_transform(pd.DataFrame(model.predict(x_test), columns=['SalePrice']), mu, sigma)
+
         test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': test_pred})
-        test_pred.to_csv('submissions\\submission_XGB.csv', index=False)
+        test_pred.to_csv(f'submissions\\submission_{"XGB_cv" if cv else "XGB"}.csv', index=False)
 
         logging.info("DONE!")
+
+    @staticmethod
+    def inverse_transform(data_frame: Union[pd.DataFrame, np.ndarray], mu: float, sigma: float) -> np.array:
+        if isinstance(data_frame, pd.DataFrame):
+            return IModel.inverse_transform(data_frame, mu, sigma)
+        else:
+            data_frame = pd.DataFrame(data_frame, columns=['SalePrice'])
+            return IModel.inverse_transform(data_frame, mu, sigma)
