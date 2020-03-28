@@ -2,4 +2,4 @@
 __pycache__
 pp_*.csv
 submissions
-Best-model.hdf5
+checkpoints

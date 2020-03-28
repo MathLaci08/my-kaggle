@@ -24,12 +24,13 @@ if not submissions_dir.exists():
 
 pp = preprocessing.PreProcessing()
 
-# NeuralNetwork().predict(*pp.load_data())
-# XGB().predict(*pp.load_data())
+NeuralNetwork().predict(*pp.load_data(), cv=True)
+NeuralNetwork().predict(*pp.load_data())
+XGB().predict(*pp.load_data())
 LinearRidge().predict(*pp.load_data())
-# OLS().predict(*pp.load_data(with_pca=True))
-# RandomForest().predict(*pp.load_data())
-# DecisionTree().predict(*pp.load_data())
+OLS().predict(*pp.load_data(with_pca=True))
+RandomForest().predict(*pp.load_data())
+DecisionTree().predict(*pp.load_data())
 
 all_in_one = None
 

@@ -1,7 +1,11 @@
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 import logging
+from typing import Union
+
 from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import KFold
 from i_model import IModel
 
 from keras.callbacks import ModelCheckpoint
@@ -9,18 +13,20 @@ from keras.models import Sequential
 from keras.layers import Dense
 
 random_state = 237
+n_split = 5
 
 
 class NeuralNetwork(IModel):
     def __init__(self):
         super().__init__()
 
-    def predict(self, x, x_test):
+    def predict(self, x, x_test, cv=False):
         """
         IModel's predict functions NN implementation.
 
         :param x: training data set
         :param x_test: test data set
+        :param cv: True if prediction should be made with cross-validation
         """
 
         logging.info("Performing NN prediction...")
@@ -37,10 +43,74 @@ class NeuralNetwork(IModel):
 
         y = (y - mu) / sigma
 
+        # create own scoring function
+        def dse_mae(y_true, y_pred):
+            return tf.keras.losses.mae(
+                self.inverse_transform(y_true, mu, sigma), self.inverse_transform(y_pred, mu, sigma)
+            )
+
+        model = self.create_model(x.shape[1], scoring=dse_mae)
+
+        # fit the model
+        if cv:
+            checkpoint_name = 'checkpoints\\NN_model_cv.ckpt'
+            try:
+                # load saved weight
+                model.load_weights(checkpoint_name)
+            except OSError:
+                index = 0
+                log_messages = ['Improvement in validation loss:\n']
+
+                # create checkpoints
+                checkpoint = ModelCheckpoint(
+                    checkpoint_name, monitor='val_loss', verbose=1, save_best_only=True, mode='auto'
+                )
+                for train_index, valid_index in KFold(n_split).split(x):
+                    x_train, x_valid = x.iloc[train_index, :], x.iloc[valid_index, :]
+                    y_train, y_valid = y.iloc[train_index, :], y.iloc[valid_index, :]
+                    model.fit(
+                        x_train, y_train, validation_data=(x_valid, y_valid),
+                        epochs=100, batch_size=32, callbacks=[checkpoint]
+                    )
+
+                    index += 1
+                    log_messages.append(f'Model evaluation {index} of {n_split}: {model.evaluate(x_valid, y_valid)[1]}')
+                logging.info('\n'.join(log_messages))
+        else:
+            checkpoint_name = 'checkpoints\\NN_model.ckpt'
+            try:
+                # load saved weight
+                model.load_weights(checkpoint_name)
+            except OSError:
+                # create checkpoints
+                checkpoint = ModelCheckpoint(
+                    checkpoint_name, monitor='val_loss', verbose=1, save_best_only=True, mode='auto'
+                )
+                model.fit(x, y, validation_split=0.1, epochs=500, batch_size=32, callbacks=[checkpoint])
+
+        y_valid = self.inverse_transform(pd.DataFrame(y.SalePrice.values, columns=['SalePrice']), mu, sigma)
+        pred_valid = self.inverse_transform(
+            pd.DataFrame(model.predict(x.to_numpy()), columns=['SalePrice']), mu, sigma
+        )
+
+        nn_mae = "NN full data MAE with cross validation" if cv else "NN full data MAE"
+        logging.info(f"{nn_mae}: {mean_absolute_error(y_valid, pred_valid)}")
+
+        predictions = self.inverse_transform(
+            pd.DataFrame(model.predict(x_test.to_numpy()), columns=['SalePrice']), mu, sigma
+        )
+
+        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': predictions})
+        test_pred.to_csv(f'submissions\\submission_{"NN_cv" if cv else "NN"}.csv', index=False)
+
+        logging.info("DONE!")
+
+    @staticmethod
+    def create_model(input_dim, scoring):
         model = Sequential()
 
         # the input layer
-        model.add(Dense(128, kernel_initializer='normal', input_dim=x.shape[1], activation='relu'))
+        model.add(Dense(128, kernel_initializer='normal', input_dim=input_dim, activation='relu'))
 
         # the hidden layers
         model.add(Dense(256, kernel_initializer='normal', activation='relu'))
@@ -50,33 +120,15 @@ class NeuralNetwork(IModel):
         # the output layer
         model.add(Dense(1, kernel_initializer='normal', activation='linear'))
 
-        # compile the network
-        model.compile(loss='mean_absolute_error', optimizer='adam', metrics=['mean_absolute_error'])
+        model.compile(loss='mean_absolute_error', optimizer='adam', metrics=[scoring])
 
-        # create checkpoints
-        checkpoint_name = 'Best-model.hdf5'
-        checkpoint = ModelCheckpoint(checkpoint_name, monitor='val_loss', verbose=1, save_best_only=True, mode='auto')
-        callbacks_list = [checkpoint]
+        return model
 
-        # fit the model
-        model.fit(x, y, epochs=500, batch_size=32, validation_split=0.2, callbacks=callbacks_list)
-
-        # load the best weight
-        model.load_weights(checkpoint_name)
-        model.compile(loss='mean_absolute_error', optimizer='adam', metrics=['mean_absolute_error'])
-
-        y_valid = self.inverse_transform(pd.DataFrame(y[-200:].SalePrice.values, columns=['SalePrice']), mu, sigma)
-        pred_valid = self.inverse_transform(
-            pd.DataFrame(model.predict(x[-200:].to_numpy()), columns=['SalePrice']), mu, sigma
-        )
-
-        logging.info(f"NN validation MAE: {mean_absolute_error(y_valid, pred_valid)}")
-
-        predictions = self.inverse_transform(
-            pd.DataFrame(model.predict(x_test.to_numpy()), columns=['SalePrice']), mu, sigma
-        )
-
-        test_pred = pd.DataFrame({'Id': test_ids, 'SalePrice': predictions})
-        test_pred.to_csv('submissions\\submission_NN.csv', index=False)
-
-        logging.info("DONE!")
+    @staticmethod
+    def inverse_transform(data_frame: Union[pd.DataFrame, tf.Tensor], mu: float, sigma: float) -> np.array:
+        if isinstance(data_frame, pd.DataFrame):
+            return IModel.inverse_transform(data_frame, mu, sigma)
+        else:
+            mu = tf.constant(mu, dtype=tf.float32)
+            sigma = tf.constant(sigma, dtype=tf.float32)
+            return tf.cast(tf.round(tf.math.exp(tf.add(tf.multiply(data_frame, sigma), mu))), tf.int32)
