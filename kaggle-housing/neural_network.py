@@ -1,8 +1,7 @@
 import pandas as pd
-import numpy as np
 import tensorflow as tf
 import logging
-from typing import Union
+import pathlib
 
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import KFold
@@ -58,6 +57,7 @@ class NeuralNetwork(IModel):
                 # load saved weight
                 model.load_weights(checkpoint_name)
             except OSError:
+                pathlib.Path.mkdir(pathlib.Path('checkpoints').resolve(), exist_ok=True)
                 index = 0
                 log_messages = ['Improvement in validation loss:\n']
 
