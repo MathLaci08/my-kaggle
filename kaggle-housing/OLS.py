@@ -15,15 +15,19 @@ class OLS(IModel):
     def __init__(self):
         super().__init__()
 
-    def predict(self, x, x_test):
+    def predict(self, x, x_test, cv=False):
         """
         IModel's predict functions OLS implementation.
 
         :param x: training data set
         :param x_test: test data set
+        :param cv: True if prediction should be made with cross-validation
         """
 
         logging.info("Performing OLS prediction...")
+        if cv:
+            logging.warning("Cross validation not implemented for OLS.")
+
         # cut off target variable and id from the data
         y = pd.DataFrame(x['SalePrice'], columns=['SalePrice'])
         x.drop(['SalePrice'], axis=1, inplace=True)
