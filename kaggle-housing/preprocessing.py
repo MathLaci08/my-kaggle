@@ -11,6 +11,7 @@ import seaborn as sns
 
 from scipy import stats
 from scipy.stats import norm, skew
+from scipy.special import boxcox1p
 
 import pathlib
 from math import sqrt, ceil
@@ -18,6 +19,7 @@ import logging
 
 
 n_components = 100
+box_cox_lambda = 0.15
 
 
 class PreProcessing:
@@ -326,12 +328,12 @@ class PreProcessing:
         logging.info(skewness)
 
         # transform skewed features
-        skewed_features = skewness[abs(skewness.Skew) > 1].index
+        skewed_features = skewness[abs(skewness.Skew) > 0.75].index
         logging.info(f"There are {skewed_features.size} skewed features")
 
         for feature in skewed_features:
-            self.X[feature] = np.log1p(self.X[feature])
-            self.X_test[feature] = np.log1p(self.X_test[feature])  # box-cox transformation instead?
+            self.X[feature] = boxcox1p(self.X[feature], box_cox_lambda)
+            self.X_test[feature] = boxcox1p(self.X_test[feature], box_cox_lambda)
 
         # check the skew of all numerical features again
         skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
