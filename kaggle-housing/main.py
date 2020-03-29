@@ -15,7 +15,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-models = ['XGB', 'ridge', 'NN', 'OLS', 'random', 'decision']
+models = ['XGB', 'XGB_cv', 'ridge', 'ridge_cv', 'NN', 'NN_cv', 'OLS', 'random', 'decision']
 submissions_dir = pathlib.Path(__file__, "..\\submissions").resolve()
 logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)s')
 
@@ -24,13 +24,15 @@ if not submissions_dir.exists():
 
 pp = preprocessing.PreProcessing()
 
-NeuralNetwork().predict(*pp.load_data(), cv=True)
-NeuralNetwork().predict(*pp.load_data())
-XGB().predict(*pp.load_data())
+# NeuralNetwork().predict(*pp.load_data(), cv=True)
+# NeuralNetwork().predict(*pp.load_data())
+# XGB().predict(*pp.load_data(), cv=True)
+# XGB().predict(*pp.load_data())
+LinearRidge().predict(*pp.load_data(), cv=True)
 LinearRidge().predict(*pp.load_data())
-OLS().predict(*pp.load_data(with_pca=True))
-RandomForest().predict(*pp.load_data())
-DecisionTree().predict(*pp.load_data())
+# OLS().predict(*pp.load_data(with_pca=True))
+# RandomForest().predict(*pp.load_data())
+# DecisionTree().predict(*pp.load_data())
 
 all_in_one = None
 

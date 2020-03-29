@@ -47,6 +47,7 @@ class XGB(IModel):
 
         scoring = make_scorer(dse_mae, greater_is_better=False)
 
+        # XGB Regression
         if cv:
             model = XGBRegressor(n_estimators=1000, learning_rate=0.01, random_state=random_state)
 
@@ -61,7 +62,7 @@ class XGB(IModel):
             )
             estimators = scores["estimator"]
             logs = [f'Model evaluation {i + 1} of {n_split}: {-1 * scores["test_score"][i]}' for i in range(n_split)]
-            logging.info('XGBoost validation MAE:\n\n' + '\n'.join(logs))
+            logging.info('\nXGBoost cross validation MAE:\n' + '\n'.join(logs))
 
             test_pred = None
 
@@ -98,11 +99,3 @@ class XGB(IModel):
         test_pred.to_csv(f'submissions\\submission_{"XGB_cv" if cv else "XGB"}.csv', index=False)
 
         logging.info("DONE!")
-
-    @staticmethod
-    def inverse_transform(data_frame: Union[pd.DataFrame, np.ndarray], mu: float, sigma: float) -> np.array:
-        if isinstance(data_frame, pd.DataFrame):
-            return IModel.inverse_transform(data_frame, mu, sigma)
-        else:
-            data_frame = pd.DataFrame(data_frame, columns=['SalePrice'])
-            return IModel.inverse_transform(data_frame, mu, sigma)

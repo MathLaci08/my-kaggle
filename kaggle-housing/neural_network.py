@@ -123,12 +123,3 @@ class NeuralNetwork(IModel):
         model.compile(loss='mean_absolute_error', optimizer='adam', metrics=[scoring])
 
         return model
-
-    @staticmethod
-    def inverse_transform(data_frame: Union[pd.DataFrame, tf.Tensor], mu: float, sigma: float) -> np.array:
-        if isinstance(data_frame, pd.DataFrame):
-            return IModel.inverse_transform(data_frame, mu, sigma)
-        else:
-            mu = tf.constant(mu, dtype=tf.float32)
-            sigma = tf.constant(sigma, dtype=tf.float32)
-            return tf.cast(tf.round(tf.math.exp(tf.add(tf.multiply(data_frame, sigma), mu))), tf.int32)
