@@ -161,7 +161,7 @@ class PreProcessing:
         logging.info('#2 - Deleting outliers...')
         condition1 = (self.X[nv_for_detection[5]] > 4000) & (self.y.SalePrice < 500000)
         condition2 = (self.X[nv_for_detection[0]] > 150000)
-        outliers = self.X[condition1 | condition2].index
+        outliers = self.X[condition1].index
         self.X = self.X.drop(outliers).reset_index(drop=True)
         self.y = self.y.drop(outliers).reset_index(drop=True)
 
