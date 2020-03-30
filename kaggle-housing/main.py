@@ -2,7 +2,7 @@ import pathlib
 import logging
 import pandas as pd
 import numpy as np
-import preprocessing
+import housing_preprocessing
 
 from OLS import OLS
 from decision_tree import DecisionTree
@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)
 if not submissions_dir.exists():
     submissions_dir.mkdir()
 
-pp = preprocessing.PreProcessing()
+pp = housing_preprocessing.HousingPreProcessing()
 
 NeuralNetwork().predict(*pp.load_data(), cv=True)
 NeuralNetwork().predict(*pp.load_data())

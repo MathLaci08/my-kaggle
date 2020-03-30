@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
+from i_preprocessing import IPreProcessing
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 from category_encoders import OneHotEncoder, OrdinalEncoder
 
 import matplotlib.pyplot as plt
@@ -10,42 +9,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from scipy import stats
-from scipy.stats import norm, skew
-from scipy.special import boxcox1p
+from scipy.stats import norm
 
-import pathlib
 from math import sqrt, ceil
 import logging
 
 
-n_components = 100
-box_cox_lambda = 0.15
-
-
-class PreProcessing:
+class HousingPreProcessing(IPreProcessing):
     """
     Class for data pre-processing related methods.
     Many ideas below came from: https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard/notebook
     """
-
-    def __init__(self):
-        """
-        Class instance initializer method.
-        """
-
-        try:
-            self.pp_X = None
-            self.pp_X_test = None
-            train_csv = pathlib.Path(__file__, "..\\data\\train.csv").resolve()
-            test_csv = pathlib.Path(__file__, "..\\data\\test.csv").resolve()
-
-            # read data from the provided csv files
-            self.X = pd.read_csv(train_csv)
-            self.y = None
-            self.X_test = pd.read_csv(test_csv)
-        except FileNotFoundError as e:
-            logging.error("Please download the data, before creating instance!")
-            raise e
 
     def process_data(self):
         """
@@ -54,68 +28,29 @@ class PreProcessing:
         """
 
         logging.info('Processing data...')
-        test_ids = self.__separate_target()
-        numerical_vars = self.__detect_outliers()
-        self.__normalize_target()
-        self.__imputer()
-        self.__correlation_map()
-        self.__encode_categories()
-        self.__transform_skewed_features(numerical_vars)
-        self.__standardize_data()
-
-        x_pca = self.X
-        x_test_pca = self.X_test
+        test_ids = self._separate_target()
+        numerical_vars = self._detect_outliers()
+        self._normalize_target()
+        self._imputer()
+        self._correlation_map()
+        self._encode_categories()
+        self._transform_skewed_features(numerical_vars)
+        self._standardize_data()
 
         self.X = self.X.join(self.y)
         self.X_test = test_ids.to_frame().join(self.X_test)
 
-        self.__save_data()
+        self._save_data()
 
-        self.X = x_pca
-        self.X_test = x_test_pca
-
-        self.__pca()
-
-        self.X = self.X.join(self.y)
-        self.X_test = test_ids.to_frame().join(self.X_test)
-
-        self.__save_data(prefix='pca')
-
-    def load_data(self, with_pca=False):
-        """
-        Loads the previously processed data from the saved csv files.
-
-        :param with_pca: if True, function will return a data set on which pca was performed before
-        :return: train and test set if data is preprocessed, else None.
-        """
-
-        try:
-            logging.info('Trying to load data...')
-            prefix = 'pp_pca' if with_pca else 'pp'
-            pp_train_csv = pathlib.Path(__file__, f"..\\data\\{prefix}_train.csv").resolve()
-            pp_test_csv = pathlib.Path(__file__, f"..\\data\\{prefix}_test.csv").resolve()
-
-            self.pp_X = pd.read_csv(pp_train_csv)
-            self.pp_X_test = pd.read_csv(pp_test_csv)
-            logging.info('DONE!')
-
-            return self.pp_X, self.pp_X_test
-        except FileNotFoundError:
-            logging.warning("Data is not preprocessed. Calling process_data() function...")
-            self.process_data()
-            return self.load_data(with_pca=with_pca)
-
-    def __separate_target(self):
+    def _separate_target(self):
         """
         Private function for some preliminary steps. Drops non-labelled data, separates y from X and the test
         identifiers from the test set. Also converts the 'MSSubClass' feature to 'object' type (because it is
         categorical).
-
         :return: The test identifiers for future usage.
         """
 
-
-        logging.info('#0 - Dropping unnecessary features...')
+        logging.info(f'#{self._index()} - Dropping unnecessary features...')
         # drop rows without labels
         self.X.dropna(axis=0, subset=['SalePrice'], inplace=True)
 
@@ -128,20 +63,19 @@ class PreProcessing:
         # make MSSubClass categorical
         self.X['MSSubClass'] = self.X['MSSubClass'].apply(str)
         self.X_test['MSSubClass'] = self.X_test['MSSubClass'].apply(str)
-        logging.info('#0 - DONE!')
+        logging.info(f'#{self._step_index} - DONE!')
 
         return test_ids
 
-    def __detect_outliers(self):
+    def _detect_outliers(self):
         """
         Private function for detecting the outliers in the data set. First determines those numerical variables which
         have much unique values, and then plots the target variable as the function of these features. Base on the
         graphs it drops the outliers from the data, resets indices for X and y and finally plots the functions again.
-
         :return: Set of all numerical feature names.
         """
 
-        logging.info('#1 - Detecting outliers...')
+        logging.info(f'#{self._index()} - Detecting outliers...')
         # get numerical features
         numerical_vars = self.X.select_dtypes(exclude="object").columns
         nv_for_detection = pd.Index([f for f in numerical_vars if self.X[f].nunique() > 500])
@@ -157,10 +91,10 @@ class PreProcessing:
             axes[loc // cols][loc % cols].scatter(x=self.X[feature], y=self.y, s=5)
             axes[loc // cols][loc % cols].set(xlabel=feature, ylabel='SalePrice')
         plt.show()
-        logging.info('#1 - DONE!')
+        logging.info(f'#{self._step_index} - DONE!')
 
         # deleting outliers
-        logging.info('#2 - Deleting outliers...')
+        logging.info(f'#{self._index()} - Deleting outliers...')
         condition1 = (self.X[nv_for_detection[5]] > 4000) & (self.y.SalePrice < 500000)
         condition2 = (self.X[nv_for_detection[0]] > 150000)
         outliers = self.X[condition1].index
@@ -175,17 +109,17 @@ class PreProcessing:
             axes[loc // cols][loc % cols].scatter(x=self.X[feature], y=self.y, s=5)
             axes[loc // cols][loc % cols].set(xlabel=feature, ylabel='SalePrice')
         plt.show()
-        logging.info('#2 - DONE!')
+        logging.info(f'#{self._step_index} - DONE!')
 
         return numerical_vars
 
-    def __normalize_target(self):
+    def _normalize_target(self):
         """
         This private function checks the distribution of the target variable and then transforms it with a logarithmic
         transformation (as the variable is right-skewed). Finally plots the distribution again.
         """
 
-        logging.info('#3 - Normalizing target variable...')
+        logging.info(f'#{self._index()} - Normalizing target variable...')
         # check the distribution of SalePrice
         sns.distplot(self.y, fit=norm)
 
@@ -216,18 +150,25 @@ class PreProcessing:
         plt.figure()
         stats.probplot(self.y.SalePrice, plot=plt)
         plt.show()
-        logging.info('#3 - DONE!')
+        logging.info(f'#{self._step_index} - DONE!')
 
-    def __imputer(self):
+    def _imputer(self):
         """
         Private function for dealing with missing values in the data sets. The method first creates lists of the
         feature names based on how to impute data in them, then fills the columns with appropriate values.
         """
 
-        logging.info('#4 - Imputing appropriate values in empty cells...')
+        logging.info(f'#{self._index()} - Imputing appropriate values in empty cells...')
         # deal with missing values
-        missing_values = self.X.isnull().sum().sum() + self.X_test.isnull().sum().sum()
-        logging.info(f'Number of missing values before imputing: {missing_values}')
+        missing_values = self.X.isnull().sum() + self.X_test.isnull().sum()
+        logging.info(f'Number of missing values before imputing: {missing_values.sum()}')
+
+        plt.figure(figsize=(10, 5))
+        sns.heatmap(self.X.isnull(), yticklabels=0, cbar=False, cmap='viridis')
+        plt.show()
+
+        missing_data = pd.DataFrame({'Missing Values': missing_values})
+        print(missing_data.head(20))
 
         fill_with_none = ['Alley', 'Fence', 'MiscFeature', 'MasVnrType', 'BsmtExposure', 'BsmtFinType1', 'BsmtFinType2',
                           'GarageType', 'GarageFinish']
@@ -256,7 +197,7 @@ class PreProcessing:
 
         for col in fill_with_most_frequent:
             self.X[col] = self.X[col].fillna(self.X[col].mode()[0])
-            self.X_test[col] = self.X_test[col].fillna(self.X_test[col].mode()[0])
+            self.X_test[col] = self.X_test[col].fillna(self.X[col].mode()[0])
 
         self.X['Functional'] = self.X['Functional'].fillna('Typ')
         self.X_test['Functional'] = self.X_test['Functional'].fillna('Typ')
@@ -264,28 +205,15 @@ class PreProcessing:
         missing_values = self.X.isnull().sum().sum() + self.X_test.isnull().sum().sum()
 
         logging.info(f'Number of missing values after imputing: {missing_values}')
-        logging.info('#4 - DONE!')
+        logging.info(f'#{self._step_index} - DONE!')
 
-    def __correlation_map(self):
-        """
-        Private function for plotting the correlation map between the features.
-        """
-
-        logging.info('#5 - Checking correlation between features...')
-        # correlation map between the remaining features
-        corr_map = self.X.join(self.y).corr()
-        plt.subplots(figsize=(12, 9))
-        sns.heatmap(corr_map, vmax=0.9, square=True)
-        plt.show()
-        logging.info('#5 - DONE!')
-
-    def __encode_categories(self):
+    def _encode_categories(self):
         """
         This private method stands for encoding categorical variables. Label encoding used for ordinal categories and
         one-hot encoding used for nominal categories.
         """
 
-        logging.info('#6 - Encoding categorical columns...')
+        logging.info(f'#{self._index()} - Encoding categorical columns...')
         # get column names for categorical and numerical features
         categorical_vars = self.X.select_dtypes(include='object').columns
         numerical_vars = self.X.columns.difference(categorical_vars)
@@ -311,83 +239,4 @@ class PreProcessing:
 
         self.X = x_num.join(x_cat_ord).join(x_cat_nom)
         self.X_test = x_test_num.join(x_test_cat_ord).join(x_test_cat_nom)
-        logging.info('#6 - DONE!')
-
-    def __transform_skewed_features(self, numerical_vars):
-        """
-        Private method for transforming features with high skew.
-
-        :param numerical_vars: Set of all original numerical variables.
-        """
-
-        logging.info('#7 - Determine and transform skewed features...')
-        # check the skew of all numerical features
-        skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
-        logging.info("Skew in numerical features: \n")
-        skewness = pd.DataFrame({'Skew': skewed_features})
-        logging.info(skewness)
-
-        # transform skewed features
-        skewed_features = skewness[abs(skewness.Skew) > 0.75].index
-        logging.info(f"There are {skewed_features.size} skewed features")
-
-        for feature in skewed_features:
-            self.X[feature] = boxcox1p(self.X[feature], box_cox_lambda)
-            self.X_test[feature] = boxcox1p(self.X_test[feature], box_cox_lambda)
-
-        # check the skew of all numerical features again
-        skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
-        logging.info("Skew in numerical features: \n")
-        skewness = pd.DataFrame({'Skew': skewed_features})
-        logging.info(skewness)
-        logging.info('#7 - DONE!')
-
-    def __standardize_data(self):
-        """
-        This private function's job is the standardization of all the variables.
-        """
-
-        logging.info('#8 - Standardizing variables...')
-        # standardize data
-        std_scaler = StandardScaler(copy=False)
-
-        self.X = pd.DataFrame(std_scaler.fit_transform(self.X), columns=self.X.columns)
-        self.X_test = pd.DataFrame(std_scaler.transform(self.X_test), columns=self.X.columns)
-        logging.info('#8 - DONE!')
-
-    def __pca(self):
-        """
-        This private function do the principal component analysis on our data, and as a result, dimension reduction
-        will be made.
-        """
-
-        logging.info('#9 - Performing principal component analysis...')
-        # dimension reduction
-        logging.info(f"Number of features before PCA: {self.X.shape[1]}")
-
-        pca = PCA(n_components=n_components)
-
-        self.X = pd.DataFrame(
-            pca.fit_transform(self.X),
-            columns=["PCA" + str(n) for n in range(1, n_components + 1)]
-        )
-        self.X_test = pd.DataFrame(
-            pca.transform(self.X_test),
-            columns=["PCA" + str(n) for n in range(1, n_components + 1)]
-        )
-
-        logging.info(f"Number of features after PCA: {self.X.shape[1]}")
-        logging.info('#9 - DONE!')
-
-    def __save_data(self, prefix=None):
-        """
-        Private method for saving the preprocessed data to csv files.
-        """
-
-        logging.info('#10 - Saving processed data...')
-        prefix = 'pp_' + prefix if prefix else 'pp'
-        self.X.to_csv(f'data\\{prefix}_train.csv', index=False)
-        self.X_test.to_csv(f'data\\{prefix}_test.csv', index=False)
-
-        self.already_preprocessed = True
-        logging.info('#10 - DONE!')
+        logging.info(f'#{self._step_index} - DONE!')
