@@ -37,10 +37,23 @@ class HousingPreProcessing(IPreProcessing):
         self._transform_skewed_features(numerical_vars)
         self._standardize_data()
 
+        x_pca = self.X
+        x_test_pca = self.X_test
+
         self.X = self.X.join(self.y)
         self.X_test = test_ids.to_frame().join(self.X_test)
 
         self._save_data()
+
+        self.X = x_pca
+        self.X_test = x_test_pca
+
+        self._pca()
+
+        self.X = self.X.join(self.y)
+        self.X_test = test_ids.to_frame().join(self.X_test)
+
+        self._save_data(prefix='pca')
 
     def _separate_target(self):
         """

@@ -16,7 +16,7 @@ from scipy.stats import skew
 from scipy.special import boxcox1p
 
 
-n_components = 100
+n_components = 9
 box_cox_lambda = 0.15
 
 

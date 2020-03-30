@@ -1,6 +1,6 @@
 import pandas as pd
 import logging
-from i_model import IModel
+from housing_model import HousingModel
 
 from xgboost import XGBRegressor
 
@@ -11,7 +11,7 @@ random_state = 237
 n_split = 5
 
 
-class XGB(IModel):
+class XGB(HousingModel):
     def __init__(self):
         super().__init__()
 

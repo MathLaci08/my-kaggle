@@ -1,6 +1,6 @@
 import pandas as pd
 import logging
-from i_model import IModel
+from housing_model import HousingModel
 
 from sklearn.model_selection import train_test_split, cross_validate
 from sklearn.metrics import mean_absolute_error, make_scorer
@@ -10,7 +10,7 @@ random_state = 237
 n_split = 5
 
 
-class RandomForest(IModel):
+class RandomForest(HousingModel):
     def __init__(self):
         super().__init__()
 

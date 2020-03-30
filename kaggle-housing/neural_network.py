@@ -5,7 +5,7 @@ import pathlib
 
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import KFold
-from i_model import IModel
+from housing_model import HousingModel
 
 from keras.callbacks import ModelCheckpoint
 from keras.models import Sequential
@@ -15,7 +15,7 @@ random_state = 237
 n_split = 5
 
 
-class NeuralNetwork(IModel):
+class NeuralNetwork(HousingModel):
     def __init__(self):
         super().__init__()
 

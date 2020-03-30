@@ -18,7 +18,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # models = [
 #     'XGB', 'XGB_cv', 'ridge', 'ridge_cv', 'NN', 'NN_cv', 'random', 'random_cv', 'decision', 'decision_cv', 'OLS'
 # ]
-models = ['XGB_cv', 'ridge_cv', 'NN']
+models = ['XGB', 'ridge_cv', 'NN']
 submissions_dir = pathlib.Path(__file__, "..\\submissions").resolve()
 logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)s')
 

@@ -1,5 +1,5 @@
 import logging
-from i_model import IModel
+from housing_model import HousingModel
 
 from sklearn.metrics import mean_absolute_error, make_scorer
 from sklearn.model_selection import train_test_split
@@ -12,7 +12,7 @@ random_state = 237
 n_split = 10
 
 
-class LinearRidge(IModel):
+class LinearRidge(HousingModel):
     def __init__(self):
         super().__init__()
 

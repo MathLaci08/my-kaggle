@@ -4,7 +4,7 @@ from math import sqrt, ceil
 
 import pandas as pd
 
-from category_encoders import OneHotEncoder, OrdinalEncoder
+from category_encoders import OneHotEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -62,9 +62,9 @@ class TitanicPreProcessing(IPreProcessing):
 
         # set labels to variable y
         self.y = pd.DataFrame(self.X.Survived, columns=['Survived'])
-        self.X.drop(['PassengerId', 'Ticket', 'Survived'], axis=1, inplace=True)
+        self.X.drop(['PassengerId', 'Survived'], axis=1, inplace=True)
         test_ids = self.X_test.PassengerId
-        self.X_test.drop(['PassengerId', 'Ticket'], axis=1, inplace=True)
+        self.X_test.drop(['PassengerId'], axis=1, inplace=True)
 
         logging.info(f'#{self._step_index} - DONE!')
 
@@ -149,59 +149,56 @@ class TitanicPreProcessing(IPreProcessing):
 
         logging.info(f'#{self._index()} - Encoding categorical columns...')
 
-        self.X['Sex'] = self.X['Sex'] == 'male'
-        self.X = self.X.rename(columns={'Sex': 'Male'})
+        def encode(data):
+            # encode Sex column
+            data['Sex'] = data['Sex'] == 'male'
+            data = data.rename(columns={'Sex': 'Male'})
 
-        self.X_test['Sex'] = self.X_test['Sex'] == 'male'
-        self.X_test = self.X_test.rename(columns={'Sex': 'Male'})
-
-        self.X['Name'] = self.X['Name'].apply(lambda x: str(x).split(",")[0])
-        self.X = self.X.rename(columns={'Name': 'Surname'})
-
-        self.X_test['Name'] = self.X_test['Name'].apply(lambda x: str(x).split(",")[0])
-        self.X_test = self.X_test.rename(columns={'Name': 'Surname'})
-
-        cabins = self.X['Cabin'].apply(
-            lambda x: pd.Series(
-                [str(x)[0], len(str(x).split(" "))] if str(x) != 'None' else [chr(ord('A') - 1), 0],
-                index=['Cabin class', '#Cabins']
+            # encode Cabin column
+            cabins = data['Cabin'].apply(
+                lambda x: pd.Series(
+                    [str(x)[0], len(str(x).split(" "))] if str(x) != 'None' else [chr(ord('A') - 1), 0],
+                    index=['Cabin class', '#Cabins']
+                )
             )
-        )
-        cabins['Cabin class'] = cabins['Cabin class'].apply(lambda x: ord(x) - ord('A') + 1)
-        self.X = self.X.join(cabins)
-        self.X.drop(['Cabin'], axis=1, inplace=True)
+            cabins['Cabin class'] = cabins['Cabin class'].apply(lambda x: ord(x) - ord('A') + 1)
+            data = data.join(cabins)
+            data.drop(['Cabin'], axis=1, inplace=True)
 
-        cabins = self.X_test['Cabin'].apply(
-            lambda x: pd.Series(
-                [str(x)[0], len(str(x).split(" "))] if str(x) != 'None' else [chr(ord('A') - 1), 0],
-                index=['Cabin class', '#Cabins']
+            # encode Embarked column
+            one_hot_embarked = data['Embarked'].apply(
+                lambda x: pd.Series([x == 'S', x == 'C', x == 'Q'], index=['Southampton', 'Cherbourg', 'Queenstown'])
             )
-        )
-        cabins['Cabin class'] = cabins['Cabin class'].apply(lambda x: ord(x) - ord('A') + 1)
-        self.X_test = self.X_test.join(cabins)
-        self.X_test.drop(['Cabin'], axis=1, inplace=True)
+            data = data.join(one_hot_embarked)
+            data.drop(['Embarked'], axis=1, inplace=True)
 
-        one_hot_embarked = self.X['Embarked'].apply(
-            lambda x: pd.Series([x == 'S', x == 'C', x == 'Q'], index=['Southampton', 'Cherbourg', 'Queenstown'])
-        )
-        self.X = self.X.join(one_hot_embarked)
-        self.X.drop(['Embarked'], axis=1, inplace=True)
+            # encode Name column
+            data['Name'] = data['Name'].apply(lambda x: str(x).split(",")[0])
+            data = data.rename(columns={'Name': 'Surname'})
 
-        one_hot_embarked = self.X_test['Embarked'].apply(
-            lambda x: pd.Series([x == 'S', x == 'C', x == 'Q'], index=['Southampton', 'Cherbourg', 'Queenstown'])
-        )
-        self.X_test = self.X_test.join(one_hot_embarked)
-        self.X_test.drop(['Embarked'], axis=1, inplace=True)
+            # encode Ticket column
+            special_types = ['Normal', 'LINE', 'S.O./P.P. 3']
+            replaceable = str.maketrans(dict.fromkeys('./ '))
+            data['Ticket'] = data['Ticket'].apply(
+                lambda x: 'normal' if str(x).isnumeric() else x.lower()
+            ).apply(
+                lambda x: x if x in special_types else str(x).rsplit(' ', 1)[0].translate(replaceable)
+            ).apply(
+                lambda x: x.replace('soton', 's-').replace('ston', 's-').replace('sca', 'a')
+            )
 
-        """one_hot_encoder = OneHotEncoder(use_cat_names=True, handle_unknown='ignore')
+            return data
 
-        one_hot_names = one_hot_encoder.fit_transform(self.X['Surname'])
-        one_hot_names_test = one_hot_encoder.transform(self.X_test['Surname'])
+        self.X = encode(self.X)
+        self.X_test = encode(self.X_test)
 
-        self.X = self.X.join(one_hot_names)
-        self.X_test = self.X_test.join(one_hot_names_test)"""
+        # one_hot_encoder = OneHotEncoder(use_cat_names=True)
+        # one_hot_columns = one_hot_encoder.fit_transform(self.X[['Surname', 'Ticket']])
+        # one_hot_columns_test = one_hot_encoder.transform(self.X_test[['Surname', 'Ticket']])
+        # self.X = self.X.join(one_hot_columns)
+        # self.X_test = self.X_test.join(one_hot_columns_test)
 
-        self.X.drop(['Surname'], axis=1, inplace=True)
-        self.X_test.drop(['Surname'], axis=1, inplace=True)
+        self.X.drop(['Surname', 'Ticket'], axis=1, inplace=True)
+        self.X_test.drop(['Surname', 'Ticket'], axis=1, inplace=True)
 
         logging.info(f'#{self._step_index} - DONE!')

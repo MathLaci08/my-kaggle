@@ -1,6 +1,6 @@
 import statsmodels.api as sm
 import logging
-from i_model import IModel
+from housing_model import HousingModel
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
@@ -11,7 +11,7 @@ import pandas as pd
 random_state = 237
 
 
-class OLS(IModel):
+class OLS(HousingModel):
     def __init__(self):
         super().__init__()
 
