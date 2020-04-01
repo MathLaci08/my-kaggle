@@ -5,12 +5,14 @@ import numpy as np
 import titanic_preprocessing
 
 from logistic import LogisticReg
+from svclassifier import SVClassifier
+from neural_network import NeuralNetwork
 
-# import os
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-models = ['logistic', 'logistic_cv']
+models = ['logistic', 'logistic_cv', 'svc', 'svc_cv', 'NN', 'NN_cv']
 submissions_dir = pathlib.Path(__file__, "..\\submissions").resolve()
 logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)s')
 
@@ -22,6 +24,10 @@ pp.load_data()
 
 LogisticReg().predict(*pp.load_data(), cv=True)
 LogisticReg().predict(*pp.load_data())
+SVClassifier().predict(*pp.load_data(), cv=True)
+SVClassifier().predict(*pp.load_data())
+NeuralNetwork().predict(*pp.load_data(), cv=True)
+NeuralNetwork().predict(*pp.load_data())
 
 all_in_one = None
 

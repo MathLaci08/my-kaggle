@@ -1,5 +1,5 @@
 import logging
-from i_model import IModel
+from titanic_model import TitanicModel
 
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
@@ -12,7 +12,7 @@ random_state = 237
 n_split = 10
 
 
-class LogisticReg(IModel):
+class LogisticReg(TitanicModel):
     def __init__(self):
         super().__init__()
 
