@@ -7,12 +7,15 @@ import titanic_preprocessing
 from logistic import LogisticReg
 from svclassifier import SVClassifier
 from neural_network import NeuralNetwork
+from knearest import KNearest
+from xgb_classifier import XGB
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-models = ['logistic', 'logistic_cv', 'svc', 'svc_cv', 'NN', 'NN_cv']
+# models = ['logistic', 'logistic_cv', 'svc', 'svc_cv', 'NN', 'NN_cv', 'knearest']
+models = ['NN_cv', 'knearest', 'XGB_cv']
 submissions_dir = pathlib.Path(__file__, "..\\submissions").resolve()
 logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)s')
 
@@ -28,6 +31,9 @@ SVClassifier().predict(*pp.load_data(), cv=True)
 SVClassifier().predict(*pp.load_data())
 NeuralNetwork().predict(*pp.load_data(), cv=True)
 NeuralNetwork().predict(*pp.load_data())
+KNearest().predict(*pp.load_data())
+XGB().predict(*pp.load_data(), cv=True)
+XGB().predict(*pp.load_data())
 
 all_in_one = None
 

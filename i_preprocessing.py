@@ -154,6 +154,7 @@ class IPreProcessing(abc.ABC):
         """
 
         logging.info(f'#{self._index()} - Determine and transform skewed features...')
+
         # check the skew of all numerical features
         skewed_features = self.X[numerical_vars].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
         logging.info("Skew in numerical features: \n")

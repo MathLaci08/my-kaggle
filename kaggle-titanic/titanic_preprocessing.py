@@ -12,6 +12,7 @@ import seaborn as sns
 class TitanicPreProcessing(IPreProcessing):
     """
     Class for data pre-processing related methods.
+    Many ideas below came from: https://www.kaggle.com/ldfreeman3/a-data-science-framework-to-achieve-99-accuracy
     """
 
     def process_data(self):
@@ -26,6 +27,11 @@ class TitanicPreProcessing(IPreProcessing):
         self._imputer()
         self._correlation_map()
         self._encode_categories()
+
+        # replace SibSp and Parch with Family size
+        numerical_vars = numerical_vars.drop(['SibSp', 'Parch', 'Fare', 'Age'])
+        numerical_vars = numerical_vars.insert(0, 'Family size').insert(0, 'FareBins').insert(0, 'AgeBins')
+
         self._transform_skewed_features(numerical_vars)
         self._standardize_data()
 
@@ -62,9 +68,9 @@ class TitanicPreProcessing(IPreProcessing):
 
         # set labels to variable y
         self.y = pd.DataFrame(self.X.Survived, columns=['Survived'])
-        self.X.drop(['PassengerId', 'Survived'], axis=1, inplace=True)
+        self.X.drop(['PassengerId', 'Ticket', 'Cabin', 'Survived'], axis=1, inplace=True)
         test_ids = self.X_test.PassengerId
-        self.X_test.drop(['PassengerId'], axis=1, inplace=True)
+        self.X_test.drop(['PassengerId', 'Ticket', 'Cabin'], axis=1, inplace=True)
 
         logging.info(f'#{self._step_index} - DONE!')
 
@@ -124,17 +130,14 @@ class TitanicPreProcessing(IPreProcessing):
         missing_data = pd.DataFrame({'Missing Values': missing_values})
         print(missing_data.head(20))
 
-        self.X['Age'] = self.X['Age'].fillna(self.X['Age'].mean())
-        self.X_test['Age'] = self.X_test['Age'].fillna(self.X['Age'].mean())
+        self.X['Age'] = self.X['Age'].fillna(self.X['Age'].median())
+        self.X_test['Age'] = self.X_test['Age'].fillna(self.X['Age'].median())
 
-        self.X['Cabin'] = self.X['Cabin'].fillna('None')
-        self.X_test['Cabin'] = self.X_test['Cabin'].fillna('None')
+        self.X['Embarked'] = self.X['Embarked'].fillna(self.X['Embarked'].mode()[0])
+        self.X_test['Embarked'] = self.X_test['Embarked'].fillna(self.X['Embarked'].mode()[0])
 
-        self.X['Embarked'] = self.X['Embarked'].fillna('S')
-        self.X_test['Embarked'] = self.X_test['Embarked'].fillna('S')
-
-        self.X['Fare'] = self.X['Fare'].fillna(self.X['Fare'].mean())
-        self.X_test['Fare'] = self.X_test['Fare'].fillna(self.X['Fare'].mean())
+        self.X['Fare'] = self.X['Fare'].fillna(self.X['Fare'].median())
+        self.X_test['Fare'] = self.X_test['Fare'].fillna(self.X['Fare'].median())
 
         missing_values = self.X.isnull().sum().sum() + self.X_test.isnull().sum().sum()
 
@@ -152,53 +155,54 @@ class TitanicPreProcessing(IPreProcessing):
         def encode(data):
             # encode Sex column
             data['Sex'] = data['Sex'] == 'male'
-            data = data.rename(columns={'Sex': 'Male'})
-
-            # encode Cabin column
-            cabins = data['Cabin'].apply(
-                lambda x: pd.Series(
-                    [str(x)[0], len(str(x).split(" "))] if str(x) != 'None' else [chr(ord('A') - 1), 0],
-                    index=['Cabin class', '#Cabins']
-                )
-            )
-            cabins['Cabin class'] = cabins['Cabin class'].apply(lambda x: ord(x) - ord('A') + 1)
-            data = data.join(cabins)
-            data.drop(['Cabin'], axis=1, inplace=True)
-
-            # encode Embarked column
-            one_hot_embarked = data['Embarked'].apply(
-                lambda x: pd.Series([x == 'S', x == 'C', x == 'Q'], index=['Southampton', 'Cherbourg', 'Queenstown'])
-            )
-            data = data.join(one_hot_embarked)
-            data.drop(['Embarked'], axis=1, inplace=True)
 
             # encode Name column
-            data['Name'] = data['Name'].apply(lambda x: str(x).split(",")[0])
-            data = data.rename(columns={'Name': 'Surname'})
-
-            # encode Ticket column
-            special_types = ['Normal', 'LINE', 'S.O./P.P. 3']
-            replaceable = str.maketrans(dict.fromkeys('./ '))
-            data['Ticket'] = data['Ticket'].apply(
-                lambda x: 'normal' if str(x).isnumeric() else x.lower()
-            ).apply(
-                lambda x: x if x in special_types else str(x).rsplit(' ', 1)[0].translate(replaceable)
-            ).apply(
-                lambda x: x.replace('soton', 's-').replace('ston', 's-').replace('sca', 'a')
+            name_cols = data['Name'].apply(
+                lambda x: pd.Series(
+                    [str(x).split(",")[0], str(x).split(", ")[1].split(".")[0]], index=['Family name', 'Title']
+                )
             )
+            data = data.join(name_cols)
+
+            # identify Titles with same meaning
+            data['Title'].replace({'Mlle': 'Miss', 'Ms': 'Miss', 'Mme': 'Mrs'}, inplace=True)
+
+            # group rare Titles
+            title_names = (data['Title'].value_counts() < 10)
+            data['Title'] = data['Title'].apply(lambda x: 'Misc' if title_names.loc[x] else x)
+
+            # create Family size and Alone column from SibSp, Parch cols
+            data['Family size'] = data['SibSp'] + data['Parch'] + 1
+            data['Alone'] = data['Family size'] == 1
+
+            # make 5 equal size groups from Fares
+            data['Fare'] = pd.qcut(data['Fare'], 5, labels=False)
+
+            # make 5 groups from Ages
+            data['Age'] = pd.cut(data['Age'], 5, labels=False)
+
+            # rename columns and delete unnecessary features
+            data = data.rename(columns={'Sex': 'Male', 'Fare': 'FareBins', 'Age': 'AgeBins'})
+            data.drop(['Name', 'SibSp', 'Parch'], axis=1, inplace=True)
 
             return data
 
         self.X = encode(self.X)
         self.X_test = encode(self.X_test)
 
-        # one_hot_encoder = OneHotEncoder(use_cat_names=True)
-        # one_hot_columns = one_hot_encoder.fit_transform(self.X[['Surname', 'Ticket']])
-        # one_hot_columns_test = one_hot_encoder.transform(self.X_test[['Surname', 'Ticket']])
-        # self.X = self.X.join(one_hot_columns)
-        # self.X_test = self.X_test.join(one_hot_columns_test)
+        for col in self.X.columns:
+            if self.X[col].dtype != 'float64':
+                table = self.X.join(self.y)[[col, 'Survived']].groupby(col, as_index=False).mean()
+                table['Survived'] = (table['Survived'] * 100).map('{:.2f} %'.format)
+                logging.info(f'Survival ratio by: {col}\n{table}\n{"-" * 10}\n')
 
-        self.X.drop(['Surname', 'Ticket'], axis=1, inplace=True)
-        self.X_test.drop(['Surname', 'Ticket'], axis=1, inplace=True)
+        one_hot_encoder = OneHotEncoder(use_cat_names=True)
+        one_hot_columns = one_hot_encoder.fit_transform(self.X[['Title', 'Embarked']])
+        one_hot_columns_test = one_hot_encoder.transform(self.X_test[['Title', 'Embarked']])
+        self.X = self.X.join(one_hot_columns)
+        self.X_test = self.X_test.join(one_hot_columns_test)
+
+        self.X.drop(['Family name', 'Title', 'Embarked'], axis=1, inplace=True)
+        self.X_test.drop(['Family name', 'Title', 'Embarked'], axis=1, inplace=True)
 
         logging.info(f'#{self._step_index} - DONE!')
