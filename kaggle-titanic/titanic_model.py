@@ -1,9 +1,5 @@
 import abc
 import pandas as pd
-import numpy as np
-import tensorflow as tf
-
-from typing import Union
 from i_model import IModel
 
 
