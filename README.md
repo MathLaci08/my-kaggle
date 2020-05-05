@@ -1,1 +1,1 @@
-my-kaggle
+AI framework for solving kaggle problems
