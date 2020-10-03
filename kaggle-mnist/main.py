@@ -12,7 +12,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-models = ['NN_cv', 'NN', 'knearest', 'logistic', 'logistic_cv']
+models = ['NN_cv', 'NN', 'knearest']
 submissions_dir = pathlib.Path(__file__, "..\\submissions").resolve()
 logging.basicConfig(level=logging.INFO, format='*** %(levelname)s *** %(message)s')
 
@@ -21,8 +21,8 @@ if not submissions_dir.exists():
 
 pp = mnist_preprocessing.MnistPreProcessing()
 
-NeuralNetwork().predict(*pp.load_data())
 NeuralNetwork().predict(*pp.load_data(), cv=True)
+NeuralNetwork().predict(*pp.load_data())
 KNearest().predict(*pp.load_data())
 LogisticReg().predict(*pp.load_data())
 
