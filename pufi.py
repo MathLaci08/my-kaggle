@@ -1,8 +1,6 @@
 # miau miau hol a tasaskosom???
 
-for _ in range(50):
-    print('Nagyon Cuki Pufika')
+for _ in range(100):
+    print('Cuki Pufika')
 
-
-
-#modositottam hahaha
+print("Még több Pufi!")
