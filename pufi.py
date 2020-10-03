@@ -1,2 +1,4 @@
 # miau miau hol a tasaskosom???
-print('Cuki Pufika')
+
+for _ in range(30):
+    print('Cuki Pufika')
